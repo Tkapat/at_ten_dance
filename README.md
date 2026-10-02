@@ -1,36 +1,91 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FaceTrack — admin console
 
-## Getting Started
+Next.js 16 (App Router) front end for the FaceTrack face-recognition attendance
+service. Admin only: there is no self sign-up anywhere in this UI.
 
-First, run the development server:
+## Getting started
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
+pnpm dev          # http://localhost:3000 — mock data by default
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Demo sign-in in mock mode: **admin / facetrack**.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Point at a live backend:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+cp .env.example .env.local
+#   NEXT_PUBLIC_USE_MOCK=false
+#   NEXT_PUBLIC_API_URL=http://localhost:8000
+#   JWT_SECRET=<random hex>            # required in production
+pnpm dev
+```
 
-## Learn More
+| Script            | What it does                                  |
+| ----------------- | --------------------------------------------- |
+| `pnpm dev`        | dev server                                    |
+| `pnpm build`      | production build (does **not** run ESLint)    |
+| `pnpm start`      | serve the production build                    |
+| `pnpm lint`       | ESLint, including the React Compiler rules    |
 
-To learn more about Next.js, take a look at the following resources:
+Type-checking is `npx tsc --noEmit`.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Routes
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Path              | Screen                                                             |
+| ----------------- | ------------------------------------------------------------------ |
+| `/login`          | Sign in (redirects to `?next=` when it was forced)                 |
+| `/`               | Dashboard: today's counts, group rates, health, quick student list |
+| `/scan`           | Live recognition overlay                                            |
+| `/register`       | Guided enrolment: details → capture → review                       |
+| `/analytics`      | Monthly attendance by department / degree / section / year         |
+| `/students/[id]`  | Student detail, heatmap, month-by-month, edit / delete             |
+| `/settings`       | Account, recognition, camera, holidays, appearance, service        |
 
-## Deploy on Vercel
+All app routes sit behind `proxy.ts` (Next 16's middleware), which validates the
+session cookie and redirects to `/login`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Data layer
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `lib/api.ts` exports `api(): FaceTrackApi`. `USE_MOCK` selects the built-in
+  mock adapter (`lib/mock.ts`) or the real adapter (`fetch` against
+  `NEXT_PUBLIC_API_URL`).
+- `lib/token.ts` / `lib/session.ts`: the cookie is httpOnly. The client fetches
+  the raw token from `GET /api/auth/token` and sends it as `Authorization:
+  Bearer` (REST) or `?token=` (WebSocket) — browsers cannot set headers on a WS
+  handshake.
+- Lists and summaries are read through `@tanstack/react-query`; every screen has
+  explicit loading, empty and error states.
+
+## Live overlay
+
+- `hooks/use-face-stream.ts` opens `WS {WS_BASE}/ws/recognize?token=`, encodes
+  the camera frame to JPEG and paces sends on server acks (~110 ms), with
+  exponential reconnect backoff.
+- `lib/overlay.ts` is a standalone `FaceOverlay` class: it maps normalized
+  `[x, y, w, h]` boxes to device pixels, lerps every frame at ~0.35 and draws
+  corner brackets + name pills in a `requestAnimationFrame` loop.
+- **No React render happens per frame.** The overlay is a canvas; React only
+  re-renders on throttled aggregates (≈4 Hz) for the panel numbers.
+
+## Conventions
+
+- Tailwind 4 (CSS-first) + design tokens in `app/globals.css`. Indigo accent,
+  6px status dots with labels (colour is never the only signal), `tabular-nums`
+  everywhere a number changes.
+- Cards `rounded-2xl`, inputs/buttons `rounded-xl`, sheets/camera `rounded-3xl`;
+  touch targets ≥ 44px; content max-width 1100px.
+- React Compiler lint rules apply: no `setState` in an effect body, no ref
+  reads/writes during render. Prefer event handlers, rAF/IO callbacks or
+  `useSyncExternalStore`.
+- Forms use `react-hook-form` + `zod` (`lib/schemas.ts`). Year fields are
+  strings (`"1"`…`"4"`) in forms and converted on submit.
+- `pnpm build` after route changes, then `npx next typegen` if `tsc` complains
+  about a missing route type.
+
+## PWA
+
+`app/manifest.ts`, generated icons in `public/` and `public/sw.js` (registered
+in production only). The service worker caches hashed build assets, images and
+recent navigations — API and WebSocket traffic is never cached.

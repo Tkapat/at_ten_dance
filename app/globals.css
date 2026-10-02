@@ -1,26 +1,220 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ---------------------------------------------------------------- tokens */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: 0 0% 100%;
+  --foreground: 240 10% 4%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 10% 4%;
+  --muted: 240 5% 96%;
+  --muted-foreground: 240 4% 46%;
+  --border: 240 6% 90%;
+  --input: 240 6% 88%;
+  --ring: 239 84% 67%;
+  --primary: 239 84% 67%;
+  --primary-foreground: 0 0% 100%;
+  --success: 160 84% 39%;
+  --warning: 38 92% 50%;
+  --danger: 350 89% 60%;
+  --radius: 0.75rem;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.dark {
+  --background: 240 10% 4%;
+  --foreground: 0 0% 98%;
+  --card: 240 6% 7%;
+  --card-foreground: 0 0% 98%;
+  --muted: 240 4% 12%;
+  --muted-foreground: 240 5% 65%;
+  --border: 240 4% 16%;
+  --input: 240 4% 20%;
+  --ring: 239 84% 67%;
+  --primary: 239 84% 67%;
+  --primary-foreground: 0 0% 100%;
+  --success: 160 74% 46%;
+  --warning: 38 92% 55%;
+  --danger: 350 89% 65%;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
+  --color-danger: hsl(var(--danger));
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --shadow-sheet: 0 8px 32px -8px hsl(240 10% 4% / 0.18), 0 2px 8px -2px hsl(240 10% 4% / 0.08);
+  --shadow-float: 0 10px 30px -12px hsl(240 10% 4% / 0.35);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ------------------------------------------------------------------ base */
+html {
+  -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "cv11", "ss01";
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
 }
+
+::selection {
+  background: hsl(var(--primary) / 0.22);
+  color: hsl(var(--foreground));
+}
+
+:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border: 3px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ------------------------------------------------------------- utilities */
+.glass {
+  background: hsl(var(--background) / 0.72);
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+}
+
+.glass-strong {
+  background: hsl(var(--card) / 0.86);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+}
+
+.safe-b {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.hatch {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    hsl(var(--muted-foreground) / 0.28) 0 1px,
+    transparent 1px 5px
+  );
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: hsl(var(--muted));
+}
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    hsl(var(--background) / 0.65),
+    transparent
+  );
+  animation: shimmer 1.5s var(--ease-out) infinite;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.86);
+  }
+}
+
+@keyframes highlight-fade {
+  0% {
+    background-color: hsl(var(--success) / 0.16);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.row-flash {
+  animation: highlight-fade 1.2s var(--ease-out) forwards;
+}
+
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin-slow {
+  animation: spin-slow 1.1s linear infinite;
+}
+
+/* ------------------------------------------------------- avatar palettes */
+/* Muted, theme-aware tints. Saturation stays low so a list of avatars never
+   turns into a rainbow. */
+.avatar-0 { --av-bg: 214 45% 94%; --av-fg: 215 45% 32%; }
+.avatar-1 { --av-bg: 152 35% 92%; --av-fg: 152 45% 26%; }
+.avatar-2 { --av-bg: 34 60% 92%;  --av-fg: 26 55% 30%; }
+.avatar-3 { --av-bg: 345 40% 93%; --av-fg: 345 50% 32%; }
+.avatar-4 { --av-bg: 262 45% 94%; --av-fg: 262 45% 34%; }
+.avatar-5 { --av-bg: 186 40% 92%; --av-fg: 188 50% 26%; }
+
+.dark .avatar-0 { --av-bg: 215 28% 16%; --av-fg: 214 55% 78%; }
+.dark .avatar-1 { --av-bg: 152 26% 14%; --av-fg: 152 45% 74%; }
+.dark .avatar-2 { --av-bg: 32 32% 16%;  --av-fg: 34 70% 76%; }
+.dark .avatar-3 { --av-bg: 345 28% 16%; --av-fg: 345 60% 80%; }
+.dark .avatar-4 { --av-bg: 262 30% 17%; --av-fg: 263 60% 82%; }
+.dark .avatar-5 { --av-bg: 186 28% 14%; --av-fg: 186 50% 76%; }
