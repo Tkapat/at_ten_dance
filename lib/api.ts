@@ -137,6 +137,9 @@ async function request<T>(
   const token = await readToken();
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
+  // Free ngrok tiers serve an HTML interstitial to browser requests, which the
+  // browser then reports as a CORS error. This header is their documented opt-out.
+  headers.set("ngrok-skip-browser-warning", "1");
   if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
