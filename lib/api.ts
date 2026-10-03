@@ -17,7 +17,7 @@ import type {
 import type { Degree, Pose } from "./constants";
 import { API_BASE, USE_MOCK, WS_BASE } from "./env";
 import { createMockApi } from "./mock";
-import { clearToken, getToken } from "./token";
+import { clearToken, ensureToken, getToken } from "./token";
 
 /**
  * One typed client for the whole app. Components never call `fetch`.
@@ -121,8 +121,12 @@ export interface RegisterOptions {
 
 /* ------------------------------------------------------------------ real */
 
-function readToken(): string | null {
-  return getToken();
+async function readToken(): Promise<string | null> {
+  if (getToken()) return getToken();
+  // A data query can reach here before `useSession` has cached the token.
+  // Waiting for it avoids a 401 bounce to /login on the first paint;
+  // `ensureToken` shares one in-flight request across every caller.
+  return ensureToken();
 }
 
 async function request<T>(
@@ -130,7 +134,7 @@ async function request<T>(
   init: RequestInit = {},
   base = API_BASE,
 ): Promise<T> {
-  const token = readToken();
+  const token = await readToken();
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {

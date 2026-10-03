@@ -7,20 +7,24 @@ service. Admin only: there is no self sign-up anywhere in this UI.
 
 ```bash
 pnpm install
-pnpm dev          # http://localhost:3000 — mock data by default
+pnpm dev          # http://localhost:3000 — mock data unless .env sets otherwise
 ```
 
 Demo sign-in in mock mode: **admin / facetrack**.
 
-Point at a live backend:
+Point at a live backend (`.env`, not `.env.local`, so a clone behaves the same
+way; `NEXT_PUBLIC_*` is inlined at compile time, so restart `pnpm dev` after
+editing it):
 
 ```bash
-cp .env.example .env.local
 #   NEXT_PUBLIC_USE_MOCK=false
 #   NEXT_PUBLIC_API_URL=http://localhost:8000
-#   JWT_SECRET=<random hex>            # required in production
+#   JWT_SECRET=<the same value as backend/.env>
 pnpm dev
 ```
+
+Sign-in then goes through `POST {API_BASE}/api/auth/login`; the backend must be
+running with the same `JWT_SECRET`, or the cookie it returns will be rejected.
 
 | Script            | What it does                                  |
 | ----------------- | --------------------------------------------- |
