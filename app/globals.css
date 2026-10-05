@@ -218,3 +218,7 @@ body {
 .dark .avatar-3 { --av-bg: 345 28% 16%; --av-fg: 345 60% 80%; }
 .dark .avatar-4 { --av-bg: 262 30% 17%; --av-fg: 263 60% 82%; }
 .dark .avatar-5 { --av-bg: 186 28% 14%; --av-fg: 186 50% 76%; }
+
+.highlight-flash {
+  animation: highlight-fade 1.2s var(--ease-out) forwards;
+}

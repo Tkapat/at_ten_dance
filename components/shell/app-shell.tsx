@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { useTheme } from "next-themes";
 import { NAV_ITEMS, TAB_ITEMS, titleForPath } from "./nav-items";
@@ -12,6 +12,7 @@ import { IconButton } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { clearToken } from "@/lib/token";
 import { cn } from "@/lib/utils";
+import { spring } from "@/lib/motion";
 import { useSession } from "@/hooks/use-session";
 import { useMounted } from "@/hooks/use-mounted";
 
@@ -75,10 +76,10 @@ function DesktopRail({ pathname }: { pathname: string }) {
               aria-current={active ? "page" : undefined}
             >
               {active && (
-                <motion.span
+                <m.span
                   layoutId="rail-active"
                   className="absolute inset-0 rounded-xl bg-muted"
-                  transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                  transition={spring.snappy}
                 />
               )}
               {isRegister ? (
@@ -135,10 +136,10 @@ function TabBar({ pathname }: { pathname: string }) {
                 )}
               >
                 {active && (
-                  <motion.span
+                  <m.span
                     layoutId="tab-active"
                     className="absolute inset-x-2 top-1 h-8 rounded-lg bg-muted"
-                    transition={{ type: "spring", stiffness: 460, damping: 36 }}
+                    transition={spring.snappy}
                   />
                 )}
                 <item.icon className="relative size-5" />
@@ -159,7 +160,7 @@ function TabBar({ pathname }: { pathname: string }) {
             aria-label="Register a student"
             className="absolute left-1/2 top-0 z-20 -translate-x-1/2 -translate-y-1/2"
           >
-            <motion.span
+            <m.span
               whileTap={{ scale: 0.94 }}
               className={cn(
                 "grid size-14 place-items-center rounded-full bg-primary text-primary-foreground",
@@ -168,7 +169,7 @@ function TabBar({ pathname }: { pathname: string }) {
               )}
             >
               <Plus className="size-6" strokeWidth={2.5} />
-            </motion.span>
+            </m.span>
           </Link>
         </div>
       </div>

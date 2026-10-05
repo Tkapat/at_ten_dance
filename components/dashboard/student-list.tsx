@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { ChevronRight, Search, SlidersHorizontal, UserSearch, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Search, SlidersHorizontal, UserSearch, X } from "lucide-react";
 import { api, type StudentFilter } from "@/lib/api";
 import type { Status, StudentRow } from "@/lib/types";
 import {
@@ -23,6 +23,8 @@ import { Modal } from "@/components/ui/modal";
 import { ProgressRing } from "@/components/ui/progress-ring";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/states";
+import { Collapse } from "@/components/motion/Collapse";
+import { StaggerList, StaggerItem } from "@/components/motion/StaggerList";
 
 const PAGE = 6;
 const CHUNK = 12;
@@ -42,6 +44,7 @@ export function StudentList() {
   const [status, setStatus] = useState("");
   const [limit, setLimit] = useState(PAGE);
   const [selected, setSelected] = useState<StudentRow | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(true);
 
   const onSearch = (value: string) => {
     setSearch(value);
@@ -157,7 +160,24 @@ export function StudentList() {
                 className="pl-9"
               />
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 md:w-[440px]">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="self-start"
+              aria-expanded={filtersOpen}
+              aria-controls="student-filters"
+              onClick={() => setFiltersOpen((o) => !o)}
+            >
+              <SlidersHorizontal className="size-4" /> Filters
+              <ChevronDown
+                className={cn("size-3.5 transition-transform", filtersOpen && "rotate-180")}
+                aria-hidden
+              />
+            </Button>
+          </div>
+
+          <Collapse open={filtersOpen}>
+            <div id="student-filters" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Select
                 value={degree}
                 onChange={(e) => {
@@ -223,7 +243,7 @@ export function StudentList() {
                 ))}
               </Select>
             </div>
-          </div>
+          </Collapse>
 
           {query.isPending && !query.data ? (
             <ListSkeleton rows={PAGE} />
@@ -254,44 +274,47 @@ export function StudentList() {
               }
             />
           ) : (
-            <div ref={listRef} className="-mx-1 divide-y divide-border overflow-hidden rounded-xl">
-              {visible.map((row) => (
-                <button
-                  key={row.id}
-                  type="button"
-                  onClick={() => setSelected(row)}
-                  className={cn(
-                    "flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-muted",
-                    "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
-                  )}
-                  data-student={row.id}
-                >
-                  <Avatar name={row.name} size={38} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{row.name}</p>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                      {row.enrollmentNo}
-                      <span className="hidden sm:inline">
-                        {" · "}
-                        {row.degree}
-                        {row.department ? ` · ${row.department}` : ""} · Sec {row.section} ·{" "}
-                        {ordinal(row.year)}
-                      </span>
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
-                    <StatusDot status={row.todayStatus} className="text-xs" />
-                    <span className="text-[11px] tabular-nums text-muted-foreground">
-                      {row.monthPct}% this month
-                    </span>
-                  </div>
-                  <ChevronRight
-                    className="size-4 shrink-0 text-muted-foreground/70"
-                    aria-hidden
-                  />
-                </button>
-              ))}
-            </div>
+            <StaggerList layout={false}>
+              <div ref={listRef} className="-mx-1 divide-y divide-border overflow-hidden rounded-xl">
+                {visible.map((row, index) => (
+                  <StaggerItem key={row.id} index={index} layout={false}>
+                    <button
+                      type="button"
+                      onClick={() => setSelected(row)}
+                      className={cn(
+                        "flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-muted",
+                        "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring",
+                      )}
+                      data-student={row.id}
+                    >
+                      <Avatar name={row.name} size={38} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{row.name}</p>
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {row.enrollmentNo}
+                          <span className="hidden sm:inline">
+                            {" · "}
+                            {row.degree}
+                            {row.department ? ` · ${row.department}` : ""} · Sec {row.section} ·{" "}
+                            {ordinal(row.year)}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <StatusDot status={row.todayStatus} className="text-xs" />
+                        <span className="text-[11px] tabular-nums text-muted-foreground">
+                          {row.monthPct}% this month
+                        </span>
+                      </div>
+                      <ChevronRight
+                        className="size-4 shrink-0 text-muted-foreground/70"
+                        aria-hidden
+                      />
+                    </button>
+                  </StaggerItem>
+                ))}
+              </div>
+            </StaggerList>
           )}
 
           {rows.length > limit && (

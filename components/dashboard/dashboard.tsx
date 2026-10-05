@@ -24,6 +24,7 @@ import { ProgressBar } from "@/components/ui/controls";
 import { CardSkeleton, ListSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/states";
 import { StudentList } from "./student-list";
+import { StaggerItem } from "@/components/motion/StaggerList";
 
 export function Dashboard() {
   const router = useRouter();
@@ -263,8 +264,8 @@ function GroupCard({ state }: { state: QuerySlice<GroupStat[]> }) {
           />
         ) : (
           <ul className="space-y-4">
-            {state.data.map((g) => (
-              <li key={g.label} className="space-y-2">
+            {state.data.map((g, i) => (
+              <StaggerItem as="li" key={g.label} index={i} layout={false} className="space-y-2">
                 <div className="flex items-baseline justify-between gap-3 text-sm">
                   <span className="truncate font-medium">{g.label}</span>
                   <span className="shrink-0 tabular-nums text-muted-foreground">
@@ -275,7 +276,7 @@ function GroupCard({ state }: { state: QuerySlice<GroupStat[]> }) {
                   value={g.pct}
                   tone={g.pct >= 75 ? "success" : g.pct >= 50 ? "warning" : "danger"}
                 />
-              </li>
+              </StaggerItem>
             ))}
           </ul>
         )}

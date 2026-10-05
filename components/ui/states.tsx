@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { AlertCircle, Inbox, RefreshCw } from "lucide-react";
 import { Button } from "./button";
 import { cn } from "@/lib/utils";
@@ -19,10 +19,10 @@ function Frame({
   className?: string;
 }) {
   return (
-    <motion.div
+    <m.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: dur.base, ease }}
+      transition={{ duration: dur.base, ease: ease.out }}
       className={cn(
         "flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border px-6 py-12 text-center",
         className,
@@ -36,7 +36,7 @@ function Frame({
         <p className="mx-auto max-w-sm text-sm text-muted-foreground">{message}</p>
       </div>
       {action}
-    </motion.div>
+    </m.div>
   );
 }
 

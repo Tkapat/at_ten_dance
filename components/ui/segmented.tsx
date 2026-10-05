@@ -1,9 +1,9 @@
 "use client";
 
 import { useId, useSyncExternalStore } from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { cn } from "@/lib/utils";
-import { dur, ease } from "@/lib/motion";
+import { dur, ease, spring } from "@/lib/motion";
 
 export interface SegmentedOption<T extends string> {
   value: T;
@@ -70,10 +70,10 @@ export function Segmented<T extends string>({
             )}
           >
             {active && (
-              <motion.span
+              <m.span
                 layoutId={`segmented-${id}`}
                 className="absolute inset-0 rounded-lg border border-border bg-card shadow-sm"
-                transition={{ type: "spring", stiffness: 420, damping: 34 }}
+                transition={spring.snappy}
               />
             )}
             <span className="relative z-10 inline-flex items-center gap-1.5">
@@ -108,12 +108,12 @@ export const overlayMotion = {
   initial: { opacity: 0 },
   animate: { opacity: 1 },
   exit: { opacity: 0 },
-  transition: { duration: dur.fast, ease },
+  transition: { duration: dur.fast, ease: ease.out },
 };
 
 export const contentMotion = {
   initial: { opacity: 0, scale: 0.96, y: 8 },
   animate: { opacity: 1, scale: 1, y: 0 },
   exit: { opacity: 0, scale: 0.97, y: 4 },
-  transition: { type: "spring" as const, stiffness: 340, damping: 30 },
+  transition: spring.snappy,
 };

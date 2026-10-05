@@ -1,29 +1,31 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useReducedMotion } from "framer-motion";
+import { useMotionPref } from "@/hooks/useMotionPref";
+import { dur, ease } from "@/lib/motion";
 
-const EASE = [0.22, 1, 0.36, 1] as const;
-
-/** cubic-bezier(0.22, 1, 0.36, 1) sampled by Newton-Raphson — no library cost. */
-function easeOut(p: number): number {
-  const [x1, y1, x2, y2] = EASE;
+/** Sample the token easing by Newton-Raphson — no library cost. */
+function makeEaseOut([x1, y1, x2, y2]: readonly [number, number, number, number]) {
   const cx = 3 * x1;
   const bx = 3 * (x2 - x1) - cx;
   const ax = 1 - cx - bx;
   const cy = 3 * y1;
   const by = 3 * (y2 - y1) - cy;
   const ay = 1 - cy - by;
-  let t = p;
-  for (let i = 0; i < 5; i++) {
-    const x = ((ax * t + bx) * t + cx) * t - p;
-    const d = (3 * ax * t + 2 * bx) * t + cx;
-    if (Math.abs(d) < 1e-6) break;
-    t -= x / d;
-  }
-  t = Math.min(1, Math.max(0, t));
-  return ((ay * t + by) * t + cy) * t;
+  return (p: number): number => {
+    let t = p;
+    for (let i = 0; i < 5; i++) {
+      const x = ((ax * t + bx) * t + cx) * t - p;
+      const d = (3 * ax * t + 2 * bx) * t + cx;
+      if (Math.abs(d) < 1e-6) break;
+      t -= x / d;
+    }
+    t = Math.min(1, Math.max(0, t));
+    return ((ay * t + by) * t + cy) * t;
+  };
 }
+
+const easeOut = makeEaseOut(ease.out);
 
 /**
  * Counts up the first time it scrolls into view, then tracks its value with a
@@ -36,7 +38,7 @@ export function AnimatedNumber({
   decimals = 0,
   suffix = "",
   prefix = "",
-  duration = 0.6,
+  duration = dur.count,
   className,
 }: {
   value: number;
@@ -46,7 +48,7 @@ export function AnimatedNumber({
   duration?: number;
   className?: string;
 }) {
-  const reduced = useReducedMotion();
+  const { reduced } = useMotionPref();
   const nodeRef = useRef<HTMLSpanElement>(null);
   const fromRef = useRef(0);
   const [visible, setVisible] = useState(false);

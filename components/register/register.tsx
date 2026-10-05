@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, LayoutDashboard, UserPlus } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, LayoutDashboard, UserPlus } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import type { RegisterPayload, RegisterResult } from "@/lib/types";
 import {
@@ -26,6 +26,8 @@ import { Button } from "@/components/ui/button";
 import { Field, Input, Select, Tag } from "@/components/ui/input";
 import { CardSkeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/states";
+import { StepTransition } from "@/components/motion/StepTransition";
+import { CheckDraw } from "@/components/motion/CheckDraw";
 import { CapturePanel } from "./capture-panel";
 
 const STEPS = ["Details", "Capture", "Review"] as const;
@@ -47,6 +49,14 @@ export function RegisterScreen() {
 
   const capture = useRegisterCapture();
   const [step, setStep] = useState(0);
+  // The step we came from drives direction, so going Back slides the other way.
+  // Derived during render (the "adjust state when props change" pattern).
+  const [lastStep, setLastStep] = useState(step);
+  const [direction, setDirection] = useState<1 | -1>(1);
+  if (step !== lastStep) {
+    setDirection(step > lastStep ? 1 : -1);
+    setLastStep(step);
+  }
   const [details, setDetails] = useState<StudentFormValues | null>(null);
   const [result, setResult] = useState<RegisterResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -148,9 +158,7 @@ export function RegisterScreen() {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-4 px-6 py-12 text-center">
-          <span className="grid size-14 place-items-center rounded-full bg-success/12 text-success">
-            <CheckCircle2 className="size-7" />
-          </span>
+          <CheckDraw size={56} />
           <div className="space-y-1">
             <h1 className="text-[20px] font-semibold tracking-[-0.015em]">
               {reenrollId ? "Face re-enrolled" : "Student registered"}
@@ -183,6 +191,7 @@ export function RegisterScreen() {
     <div className="mx-auto flex w-full max-w-[720px] flex-col gap-5">
       <Stepper step={step} />
 
+      <StepTransition stepKey={step} direction={direction} focusHeading>
       {step === 0 && (
         <Card>
           <CardHeader>
@@ -425,6 +434,7 @@ export function RegisterScreen() {
           </div>
         </div>
       )}
+      </StepTransition>
     </div>
   );
 }

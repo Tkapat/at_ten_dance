@@ -9,7 +9,7 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
  * again server-side.
  */
 
-const PUBLIC_PATHS = new Set(["/login"]);
+const PUBLIC_PATHS = new Set(["/login", "/dev/motion"]);
 
 export default async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;

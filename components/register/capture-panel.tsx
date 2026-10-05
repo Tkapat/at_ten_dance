@@ -1,6 +1,7 @@
 "use client";
 
-import { Camera, Check, CheckCircle2, RefreshCw } from "lucide-react";
+import { Camera, CheckCircle2, RefreshCw } from "lucide-react";
+import { m } from "framer-motion";
 import {
   POSE_PLAN,
   useRegisterCapture,
@@ -15,9 +16,41 @@ import {
   MIN_POSES,
 } from "@/lib/constants";
 import { cn } from "@/lib/utils";
+import { dur, ease } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useCameraPrefs } from "@/hooks/use-camera-prefs";
+import { useMotionPref } from "@/hooks/useMotionPref";
+import { CheckDraw } from "@/components/motion/CheckDraw";
+
+/**
+ * The oval guide's edge, matching the radial-gradient dimmer below (the dark
+ * ring starts at 62% of the `ellipse 42% 44% at 50% 46%` guide). One arc is
+ * drawn per planned pose, in viewBox units stretched with `preserveAspectRatio
+ * = "none"`; strokes keep their width via `vector-effect`.
+ */
+const OVAL = { cx: 50, cy: 46, rx: 0.62 * 42, ry: 0.62 * 44 };
+
+function ovalArc(a0: number, a1: number): string {
+  const pt = (a: number): [number, number] => [
+    OVAL.cx + OVAL.rx * Math.cos(a),
+    OVAL.cy + OVAL.ry * Math.sin(a),
+  ];
+  const [x0, y0] = pt(a0);
+  const [x1, y1] = pt(a1);
+  const rx = OVAL.rx.toFixed(2);
+  const ry = OVAL.ry.toFixed(2);
+  return `M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${rx} ${ry} 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+}
+
+const OVAL_ARCS = POSE_PLAN.map((pose, i) => {
+  const step = (Math.PI * 2) / POSE_PLAN.length;
+  const gap = step * 0.12;
+  return {
+    pose,
+    d: ovalArc(-Math.PI / 2 + i * step + gap / 2, -Math.PI / 2 + (i + 1) * step - gap / 2),
+  };
+});
 
 /** One live guidance string: a quality gate first, then the check's message. */
 function guidance(state: CaptureState): string | null {
@@ -38,6 +71,7 @@ export function CapturePanel({
   // hook's return value while rendering.
   const { state: s, attachVideo, start, stop, skipPose } = capture;
   const prefs = useCameraPrefs();
+  const mpref = useMotionPref();
   const tip = guidance(s);
   const covered = POSE_PLAN.filter((p) => (s.counts[p] ?? 0) > 0).length;
 
@@ -67,6 +101,45 @@ export function CapturePanel({
               }}
               aria-hidden
             />
+
+            {/* Pose progress ring: arcs fill as frames land, then hold green. */}
+            <svg
+              className="pointer-events-none absolute inset-0 h-full w-full"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              aria-hidden
+            >
+              {OVAL_ARCS.map(({ pose, d }) => {
+                const fill = Math.min(
+                  1,
+                  (s.counts[pose] ?? 0) / FRAMES_PER_POSE,
+                );
+                const done = fill >= 1;
+                return (
+                  <g key={pose}>
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke="rgba(255,255,255,0.28)"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    <m.path
+                      d={d}
+                      fill="none"
+                      stroke={done ? "hsl(var(--success))" : "hsl(var(--primary))"}
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      vectorEffect="non-scaling-stroke"
+                      initial={{ pathLength: 0 }}
+                      animate={{ pathLength: fill }}
+                      transition={{ duration: mpref.reduced ? 0 : dur.slow, ease: ease.out }}
+                    />
+                  </g>
+                );
+              })}
+            </svg>
 
             {s.faceBox && (
               <div
@@ -157,18 +230,22 @@ export function CapturePanel({
                     : "border-border",
               )}
             >
-              <span
-                className={cn(
-                  "grid size-5 place-items-center rounded-full text-[11px] font-semibold",
-                  done
-                    ? "bg-success text-white"
-                    : active
+              {done ? (
+                <span className="grid size-5 place-items-center">
+                  <CheckDraw size={18} key={pose} />
+                </span>
+              ) : (
+                <span
+                  className={cn(
+                    "grid size-5 place-items-center rounded-full text-[11px] font-semibold",
+                    active
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground",
-                )}
-              >
-                {done ? <Check className="size-3" strokeWidth={3} /> : got}
-              </span>
+                  )}
+                >
+                  {got}
+                </span>
+              )}
               <span className="text-[11px] leading-tight text-muted-foreground">
                 {pose === s.currentPose && s.phase === "active" ? (
                   <span className="font-medium text-foreground">{pose}</span>

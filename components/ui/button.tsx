@@ -1,5 +1,5 @@
 import * as React from "react";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { dur } from "@/lib/motion";
@@ -51,7 +51,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     { className, variant = "primary", size = "md", loading, disabled, children, ...props },
     ref,
   ) => (
-    <motion.button
+    <m.button
       ref={ref}
       whileTap={{ scale: 0.97 }}
       transition={{ duration: dur.fast }}
@@ -69,7 +69,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     >
       {loading && <Loader2 className="size-4 animate-spin" aria-hidden />}
       {children}
-    </motion.button>
+    </m.button>
   ),
 );
 Button.displayName = "Button";
@@ -81,7 +81,7 @@ export function IconButton({
   ...props
 }: MotionButtonProps & { label: string }) {
   return (
-    <motion.button
+    <m.button
       whileTap={{ scale: 0.94 }}
       transition={{ duration: dur.fast }}
       aria-label={label}

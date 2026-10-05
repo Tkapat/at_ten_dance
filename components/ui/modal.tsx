@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Drawer } from "vaul";
 import { X } from "lucide-react";
@@ -103,13 +103,13 @@ export function Modal({
         {open && (
           <DialogPrimitive.Portal forceMount>
             <DialogPrimitive.Overlay forceMount asChild>
-              <motion.div
+              <m.div
                 className="fixed inset-0 z-50 bg-black/40 backdrop-blur-[2px]"
                 {...overlayMotion}
               />
             </DialogPrimitive.Overlay>
             <DialogPrimitive.Content forceMount asChild>
-              <motion.div
+              <m.div
                 className={cn(
                   "fixed left-1/2 top-1/2 z-50 flex max-h-[86dvh] w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden",
                   "rounded-2xl border border-border bg-card shadow-[var(--shadow-sheet)]",
@@ -138,7 +138,7 @@ export function Modal({
                     {footer}
                   </div>
                 )}
-              </motion.div>
+              </m.div>
             </DialogPrimitive.Content>
           </DialogPrimitive.Portal>
         )}

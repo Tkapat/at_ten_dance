@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
 import { Camera, CircleStop, Play, Radio, WifiOff } from "lucide-react";
+import { AnimatePresence, m } from "framer-motion";
 import { api, USE_MOCK } from "@/lib/api";
 import { LIVE_HINT_TEXT } from "@/lib/constants";
 import { formatTime } from "@/lib/format";
@@ -16,6 +17,9 @@ import { Button } from "@/components/ui/button";
 import { Tag } from "@/components/ui/input";
 import { ListSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/states";
+import { dur, distance, ease, spring } from "@/lib/motion";
+import { useMotionPref } from "@/hooks/useMotionPref";
+import { StaggerItem } from "@/components/motion/StaggerList";
 
 const STATUS_COPY: Record<StreamStatus, { label: string; dot: string; text: string }> = {
   idle: { label: "Camera off", dot: "bg-muted-foreground/50", text: "text-muted-foreground" },
@@ -27,6 +31,7 @@ const STATUS_COPY: Record<StreamStatus, { label: string; dot: string; text: stri
 
 export function Scan() {
   const stream = useFaceStream();
+  const mpref = useMotionPref();
   const { attachVideo, attachCanvas, refreshColors, setMirror, start, stop } = stream;
   const { resolvedTheme } = useTheme();
   const prefs = useCameraPrefs();
@@ -82,13 +87,22 @@ export function Scan() {
                 )}
               </div>
 
-              <div className="pointer-events-none absolute right-3 top-3 rounded-full bg-black/55 px-3 py-1.5 text-[11px] tabular-nums text-white/85 backdrop-blur-sm">
+              <m.div
+                className="pointer-events-none absolute right-3 top-3 rounded-full bg-black/55 px-3 py-1.5 text-[11px] tabular-nums text-white/85 backdrop-blur-sm"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{
+                  duration: mpref.t(dur.fast),
+                  delay: mpref.reduced ? 0 : dur.base,
+                  ease: ease.out,
+                }}
+              >
                 {stream.stats.ms !== null ? `${Math.round(stream.stats.ms)} ms` : "—"}
                 {" · "}
                 {stream.stats.fps} fps
                 {" · "}
                 {stream.stats.faces} faces
-              </div>
+              </m.div>
 
               {stream.hints.length > 0 && (
                 <div
@@ -108,8 +122,16 @@ export function Scan() {
             </>
           )}
 
+          <AnimatePresence>
           {!active && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+            <m.div
+              key="preview"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: mpref.t(dur.fast), ease: ease.out }}
+              className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center"
+            >
               {stream.status === "starting" ? (
                 <span className="size-8 animate-spin rounded-full border-2 border-white/40 border-t-transparent" />
               ) : (
@@ -125,11 +147,28 @@ export function Scan() {
                 <Play className="size-4" />
                 {stream.error ? "Try again" : "Start scanning"}
               </Button>
-            </div>
+            </m.div>
           )}
+          </AnimatePresence>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <m.div
+          key={`bar-${active}`}
+          initial={
+            active
+              ? mpref.reduced
+                ? { opacity: 0 }
+                : { opacity: 0, y: distance.sheet }
+              : false
+          }
+          animate={{ opacity: 1, y: 0 }}
+          transition={
+            mpref.reduced
+              ? { duration: mpref.t(dur.instant), ease: ease.out }
+              : spring.snappy
+          }
+          className="flex flex-wrap items-center justify-between gap-3"
+        >
           <p className="text-xs text-muted-foreground">
             {stream.status === "open"
               ? "Frames are sent one at a time and drawn on canvas — recognition never re-renders the page."
@@ -140,7 +179,7 @@ export function Scan() {
               <CircleStop className="size-4" /> Stop
             </Button>
           )}
-        </div>
+        </m.div>
       </div>
 
       {/* ---------------------------------------------------- marked today */}
@@ -168,11 +207,14 @@ export function Scan() {
             />
           ) : (
             <ul className="divide-y divide-border">
-              {marked.data.map((row) => {
+              {marked.data.map((row, index) => {
                 const fresh = latestEvent?.studentId === row.studentId;
                 return (
-                  <li
+                  <StaggerItem
+                    as="li"
                     key={row.id}
+                    index={index}
+                    layout={false}
                     className={cn(
                       "flex items-center gap-3 py-2.5",
                       fresh && "row-flash rounded-lg px-2",
@@ -202,7 +244,7 @@ export function Scan() {
                         )}
                       </div>
                     </div>
-                  </li>
+                  </StaggerItem>
                 );
               })}
             </ul>

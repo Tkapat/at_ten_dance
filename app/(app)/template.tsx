@@ -1,16 +1,11 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { page } from "@/lib/motion";
+import { PageTransition } from "@/components/motion/PageTransition";
 
 /**
- * Re-mounts on every navigation inside the app group, which is what gives each
- * screen its own entrance animation without tearing down the shell.
+ * Re-mounts the app group on every navigation, giving each screen its own
+ * depth-aware transition without tearing down the shell.
  */
 export default function Template({ children }: { children: React.ReactNode }) {
-  return (
-    <motion.div {...page} className="flex w-full flex-1 flex-col">
-      {children}
-    </motion.div>
-  );
+  return <PageTransition>{children}</PageTransition>;
 }

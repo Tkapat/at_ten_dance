@@ -1,6 +1,9 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { m } from "framer-motion";
+import { dur, ease, stagger } from "@/lib/motion";
+import { useMotionPref } from "@/hooks/useMotionPref";
 import type { DayRecord, Status } from "@/lib/types";
 import { addMonthsKey, daysInMonth, formatMonth, monthKey, parseKey, todayKey } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -32,6 +35,7 @@ export function AttendanceHeatmap({
   days: DayRecord[];
   onChange: (month: string) => void;
 }) {
+  const mpref = useMotionPref();
   const today = todayKey();
   const first = parseKey(month);
   const offset = first.getDay();
@@ -100,12 +104,25 @@ export function AttendanceHeatmap({
               ? `${date}: not yet`
               : `${date}: ${status ? statusLabel(status).toLowerCase() : "no record"}`;
 
+            // Diagonal wave: cells fade in by (row + column) so the grid
+            // settles corner-to-corner rather than all at once. Month changes
+            // remount the cells (the date keys change), so the wave replays.
+            const cellIndex = offset + i;
+            const row = Math.floor(cellIndex / 7);
+            const col = cellIndex % 7;
             return (
-              <span
+              <m.span
                 key={date}
                 title={label}
                 aria-label={label}
                 role="img"
+                initial={mpref.reduced ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{
+                  duration: mpref.t(dur.fast),
+                  ease: ease.out,
+                  delay: mpref.reduced ? 0 : (row + col) * stagger.list,
+                }}
                 className={cn(
                   "relative grid aspect-square place-items-center rounded-md transition-transform",
                   "hover:scale-110",
@@ -119,7 +136,7 @@ export function AttendanceHeatmap({
                 <span className="text-[10px] font-medium text-foreground/80 tabular-nums">
                   {i + 1}
                 </span>
-              </span>
+              </m.span>
             );
           })}
         </div>

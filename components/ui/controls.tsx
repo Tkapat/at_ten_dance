@@ -131,11 +131,23 @@ export function ProgressBar({
     warning: "bg-warning",
     danger: "bg-danger",
   } as const;
+  const pct = Math.max(0, Math.min(100, value));
   return (
-    <div className={cn("h-1.5 w-full overflow-hidden rounded-full bg-muted", className)}>
+    <div
+      className={cn("h-1.5 w-full overflow-hidden rounded-full bg-muted", className)}
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(pct)}
+    >
+      {/* scaleX rather than a width tween: the bar moves on the transform
+          layer only, and the track's overflow-hidden keeps the ends round. */}
       <div
-        className={cn("h-full rounded-full transition-[width] duration-300", colors[tone])}
-        style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+        className={cn(
+          "h-full w-full origin-left rounded-full transition-transform duration-300",
+          colors[tone],
+        )}
+        style={{ transform: `scaleX(${pct / 100})` }}
       />
     </div>
   );

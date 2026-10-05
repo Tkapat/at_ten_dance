@@ -1,8 +1,10 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
+
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
-import { motion } from "framer-motion";
+import { m } from "framer-motion";
 import { Moon, RefreshCw, Sun, SunMoon } from "lucide-react";
 import { api, API_BASE, USE_MOCK, WS_BASE } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,16 +16,45 @@ import { AccountSection } from "./account-section";
 import { RecognitionSection } from "./recognition-section";
 import { CameraSection } from "./camera-section";
 import { HolidaysSection } from "./holidays-section";
+import { setReducedMotionOverride } from "@/lib/motion-pref";
+import { dur, ease, distance } from "@/lib/motion";
 
 function AppearanceCard() {
   const { theme, setTheme } = useTheme();
+
+  // "Reduced" forces the lighter treatment, "Full" forces motion, and "Auto"
+  // (the default) hands the decision back to the operating system. Synced
+  // externally so this screen and the rest of the app always agree.
+  const motionChoice = useSyncExternalStore<"auto" | "full" | "reduced">(
+    (onchange) => {
+      document.addEventListener("facetrackMotionPref", onchange);
+      window.addEventListener("storage", onchange);
+      return () => {
+        document.removeEventListener("facetrackMotionPref", onchange);
+        window.removeEventListener("storage", onchange);
+      };
+    },
+    () => {
+      try {
+        const raw = window.localStorage.getItem("facetrack.reduceMotion");
+        return raw === "on" ? "reduced" : raw === "off" ? "full" : "auto";
+      } catch {
+        return "auto";
+      }
+    },
+    () => "auto",
+  );
+
+  function choose(next: "auto" | "full" | "reduced") {
+    setReducedMotionOverride(next === "reduced" ? true : next === "full" ? false : null);
+  }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Appearance</CardTitle>
       </CardHeader>
-      <CardContent className="pt-4">
+      <CardContent className="space-y-4 pt-4">
         <Segmented
           options={[
             { value: "light", label: "Light", icon: <Sun className="size-3.5" /> },
@@ -34,6 +65,24 @@ function AppearanceCard() {
           onChange={(v) => setTheme(v)}
           ariaLabel="Color theme"
         />
+        <label className="block space-y-1.5">
+          <span className="text-sm text-muted-foreground">Motion</span>
+          <Segmented
+            options={[
+              { value: "auto", label: "Auto" },
+              { value: "full", label: "Full" },
+              { value: "reduced", label: "Reduced" },
+            ]}
+            value={motionChoice}
+            onChange={(v) => choose(v)}
+            ariaLabel="Reduce motion"
+          />
+          <span className="block text-xs text-muted-foreground">
+            {motionChoice === "auto"
+              ? "Following your OS setting."
+              : "Applies across every screen on this device."}
+          </span>
+        </label>
       </CardContent>
     </Card>
   );
@@ -126,10 +175,10 @@ function ServiceCard() {
 
 export function Settings() {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
+    <m.div
+      initial={{ opacity: 0, y: distance.page }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.28 }}
+      transition={{ duration: dur.base, ease: ease.out }}
       className="mx-auto w-full max-w-3xl space-y-4 pb-6"
     >
       <p className="text-sm text-muted-foreground">
@@ -142,6 +191,6 @@ export function Settings() {
       <HolidaysSection />
       <AppearanceCard />
       <ServiceCard />
-    </motion.div>
+    </m.div>
   );
 }

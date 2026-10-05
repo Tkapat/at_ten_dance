@@ -50,6 +50,60 @@ Type-checking is `npx tsc --noEmit`.
 All app routes sit behind `proxy.ts` (Next 16's middleware), which validates the
 session cookie and redirects to `/login`.
 
+## Features
+
+What the admin can actually do today — seven screens, one account, no
+student-facing side.
+
+**Dashboard `/`** — present/absent/this-month/enrolled stat cards (with an
+"Off day" state on Sundays and holidays), a today's-attendance ring, per-department
+rates for the current month, a health strip (model, ms/frame, gallery, database,
+Retry), and Register / Start scanning shortcuts. Polls at 5 s and 30 s.
+
+**Students (card on the dashboard)** — search by name or enrollment, filter by
+degree / section / year / today's status, clear filters when active. Rows show
+today's status and this month's %, and flash when a student is newly marked. A
+click opens a quick view with *Re-enroll face* and *Open profile*. Six rows at a
+time, *Show more* by 12.
+
+**Student profile `/students/[id]`** — month and year rings, a month-by-month
+calendar with all six states (present, late, excused, absent, Sunday, holiday),
+daily records with first-seen time and confidence %, a 12-bar year chart, plus
+**Edit** (name, enrollment, degree, section, department, year), **Re-enroll** and
+**Delete** behind a confirm modal that warns embeddings and attendance history
+are removed permanently.
+
+**Analytics `/analytics`** — group attendance by department / degree / section /
+year, month stepping back to Jan 2024, overall/highest/lowest tiles, a colour-coded
+bar chart and a ranked list.
+
+**Scan `/scan`** — start and stop the camera, live canvas overlay naming each
+face with confidence at 60 fps (no React re-render), a `ms · fps · faces`
+readout, coaching hints, and a *Marked today* list showing first-seen time,
+status and confidence that updates as people are recognised. Specific error
+messages for expired sessions, an unreachable service, missing HTTPS, blocked
+permissions and absent hardware.
+
+**Register `/register`** — a three-step wizard (details → capture → review) with
+an oval framing guide, a live face box, a 4 × 3 pose plan, one high-priority
+guidance message, Skip this angle and Pause. *Continue* is locked until **≥ 8
+good frames across ≥ 3 poses**. Duplicate enrolments come back as *Already
+registered* with the matched student and similarity. `/register?student=<id>`
+re-enrols an existing student with every field prefilled.
+
+**Settings `/settings`** — change password (live strength meter, current
+password required), hot-swap `buffalo_s` ↔ `buffalo_l`, six recognition sliders
+with draft/Reset/Save, preferred camera and mirror toggle, holiday add/remove,
+Light/Dark/System theme, and a service card showing Live or Mock mode, endpoint
+URLs, active model and gallery size with a manual Refresh.
+
+Every card and list has loading, empty and error-plus-Retry states; failures
+toast the server's message. Session expiry anywhere redirects to `/login?next=`.
+
+**Not built yet:** no export (CSV/print/share), no manual attendance correction
+or undo, no bulk actions or archive (delete is permanent), no keyboard shortcuts
+beyond segmented controls.
+
 ## Data layer
 
 - `lib/api.ts` exports `api(): FaceTrackApi`. `USE_MOCK` selects the built-in

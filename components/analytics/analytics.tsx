@@ -14,6 +14,8 @@ import {
 } from "recharts";
 import { ChevronLeft, ChevronRight, TrendingDown, TrendingUp } from "lucide-react";
 import { api, type Segment } from "@/lib/api";
+import { dur, ease, spring } from "@/lib/motion";
+import { useMotionPref } from "@/hooks/useMotionPref";
 import { addMonthsKey, formatMonth, monthKey } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,6 +25,9 @@ import { ProgressBar } from "@/components/ui/controls";
 import { Tag } from "@/components/ui/input";
 import { ChartSkeleton } from "@/components/ui/skeleton";
 import { EmptyState, ErrorState } from "@/components/ui/states";
+import { AnimatedNumber } from "@/components/ui/animated-number";
+import { StaggerItem } from "@/components/motion/StaggerList";
+import { m } from "framer-motion";
 
 const SEGMENTS: { value: Segment; label: string }[] = [
   { value: "department", label: "Department" },
@@ -39,6 +44,7 @@ function tone(pct: number) {
 }
 
 export function Analytics() {
+  const mpref = useMotionPref();
   const [segment, setSegment] = useState<Segment>("department");
   const [month, setMonth] = useState(monthKey());
 
@@ -122,8 +128,8 @@ export function Analytics() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Tile label="Overall" value={`${weighted}%`} />
-            <Tile label="Groups" value={String(groups.length)} />
+            <Tile label="Overall" value={<AnimatedNumber value={weighted} decimals={1} suffix="%" />} />
+            <Tile label="Groups" value={<AnimatedNumber value={groups.length} />} />
             <Tile
               label="Highest"
               value={highest ? `${highest.label} · ${highest.pct}%` : "—"}
@@ -192,7 +198,14 @@ export function Analytics() {
                         formatter={(value) => [`${value}%`, "Attendance"]}
                         labelFormatter={(label) => String(label)}
                       />
-                      <Bar dataKey="pct" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                      <Bar
+                        dataKey="pct"
+                        radius={[6, 6, 0, 0]}
+                        maxBarSize={48}
+                        isAnimationActive={!mpref.reduced}
+                        animationDuration={dur.slow * 1000}
+                        animationEasing={`cubic-bezier(${ease.out[0]},${ease.out[1]},${ease.out[2]},${ease.out[3]})`}
+                      >
                         {groups.map((g) => (
                           <Cell
                             key={g.label}
@@ -216,20 +229,29 @@ export function Analytics() {
             <CardContent className="pt-4">
               <ol className="space-y-4">
                 {groups.map((g, i) => (
-                  <li key={g.label} className="space-y-2">
+                  <StaggerItem as="li" key={g.label} index={i} layout={false} className="space-y-2">
                     <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
                       <span className="w-5 shrink-0 tabular-nums text-muted-foreground">
                         {i + 1}
                       </span>
                       <span className="font-medium">{g.label}</span>
-                      {g.label === lowestId && <Tag tone="danger">Lowest</Tag>}
+                      {g.label === lowestId && (
+                        <m.span
+                          className="inline-flex"
+                          initial={{ opacity: 0, scale: mpref.reduced ? 1 : 0.85 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={mpref.reduced ? { duration: mpref.t(dur.fast) } : spring.pop}
+                        >
+                          <Tag tone="danger">Lowest</Tag>
+                        </m.span>
+                      )}
                       {i === 0 && groups.length > 1 && <Tag tone="success">Highest</Tag>}
                       <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
                         {g.presentDays}/{g.workingDays} days · {g.pct}%
                       </span>
                     </div>
                     <ProgressBar value={g.pct} tone={tone(g.pct)} />
-                  </li>
+                  </StaggerItem>
                 ))}
               </ol>
             </CardContent>
@@ -248,7 +270,7 @@ function Tile({
   small,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   icon?: React.ReactNode;
   tone?: string;
   small?: boolean;
