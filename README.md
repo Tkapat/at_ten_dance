@@ -71,7 +71,8 @@ calendar with all six states (present, late, excused, absent, Sunday, holiday),
 daily records with first-seen time and confidence %, a 12-bar year chart, plus
 **Edit** (name, enrollment, degree, section, department, year), **Re-enroll** and
 **Delete** behind a confirm modal that warns embeddings and attendance history
-are removed permanently.
+are removed permanently. Delete deactivates: attendance history is retained, and
+the student leaves the roster.
 
 **Analytics `/analytics`** — group attendance by department / degree / section /
 year, month stepping back to Jan 2024, overall/highest/lowest tiles, a colour-coded
@@ -87,15 +88,19 @@ permissions and absent hardware.
 **Register `/register`** — a three-step wizard (details → capture → review) with
 an oval framing guide, a live face box, a 4 × 3 pose plan, one high-priority
 guidance message, Skip this angle and Pause. *Continue* is locked until **≥ 8
-good frames across ≥ 3 poses**. Duplicate enrolments come back as *Already
-registered* with the matched student and similarity. `/register?student=<id>`
-re-enrols an existing student with every field prefilled.
+good frames across ≥ 3 poses**. Degrees, departments and sections come from the
+service, so the form cannot ask for a programme the institute does not teach.
+Duplicate enrolments come back as *Already registered* with the matched student
+and similarity. `/register?student=<id>` re-enrols an existing student with every
+field prefilled.
 
 **Settings `/settings`** — change password (live strength meter, current
-password required), hot-swap `buffalo_s` ↔ `buffalo_l`, six recognition sliders
-with draft/Reset/Save, preferred camera and mirror toggle, holiday add/remove,
-Light/Dark/System theme, and a service card showing Live or Mock mode, endpoint
-URLs, active model and gallery size with a manual Refresh.
+password required; the service ends the session, so you are returned to sign in),
+a `buffalo_s` ↔ `buffalo_l` switch that takes effect on the next service restart
+rather than pretending to hot-swap, six recognition sliders with draft/Reset/Save,
+preferred camera and mirror toggle, holiday add/remove, Light/Dark/System theme,
+and a service card showing Live or Mock mode, endpoint URLs, active model and
+gallery size with a manual Refresh.
 
 Every card and list has loading, empty and error-plus-Retry states; failures
 toast the server's message. Session expiry anywhere redirects to `/login?next=`.
@@ -109,6 +114,14 @@ beyond segmented controls.
 - `lib/api.ts` exports `api(): FaceTrackApi`. `USE_MOCK` selects the built-in
   mock adapter (`lib/mock.ts`) or the real adapter (`fetch` against
   `NEXT_PUBLIC_API_URL`).
+- **The real adapter is the only place that knows the service's wire format.**
+  The service is institute-scoped and schema-driven, so several of its payloads
+  do not match the app's own types and are mapped at this boundary: a student's
+  login id arrives as `loginId`, a weekly off day as `"off"`, `year` and today's
+  status are only computed by the roster endpoint, and a `PATCH` has to carry
+  every column of the institute's own schema with the login id under whichever
+  key that institute chose. Components and the mock adapter only ever see the
+  app's types.
 - `lib/token.ts` / `lib/session.ts`: the cookie is httpOnly. The client fetches
   the raw token from `GET /api/auth/token` and sends it as `Authorization:
   Bearer` (REST) or `?token=` (WebSocket) — browsers cannot set headers on a WS

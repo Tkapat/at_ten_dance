@@ -103,7 +103,7 @@ export function StudentDetailScreen({ id }: { id: string }) {
         qc.invalidateQueries({ queryKey: ["students"] }),
         qc.invalidateQueries({ queryKey: ["summary"] }),
       ]);
-      toast.success("Student deleted.");
+      toast.success("Student removed.");
       router.replace("/");
     } catch (err) {
       toast.error(
@@ -300,7 +300,7 @@ export function StudentDetailScreen({ id }: { id: string }) {
         open={confirmingDelete}
         onOpenChange={setConfirmingDelete}
         title="Delete this student?"
-        description="Their face embeddings and attendance history are removed. This cannot be undone."
+        description="They leave the roster and stop being recognised. Their attendance history is kept."
         size="sm"
         footer={
           <div className="flex w-full justify-end gap-2">

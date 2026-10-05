@@ -10,29 +10,34 @@ import { API_BASE, USE_MOCK } from "@/lib/env";
  * Signs the admin in.
  *
  * Mock build: verifies the demo credentials locally. Real build: forwards to
- * `POST {API_BASE}/api/auth/login` and adopts whatever token the service
- * returns, so the cookie always holds a token the backend itself accepts.
+ * `POST {API_BASE}/auth/institute/login` and adopts the token the service
+ * returns, so the cookie always holds a token the backend itself accepts. The
+ * service signs institute staff in by email, which is what the form's username
+ * field sends.
  */
 
 const MIN_PASSWORD_LENGTH = 8;
 
 async function forwardToService(username: string, password: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/auth/login`, {
+  const res = await fetch(`${API_BASE}/auth/institute/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ email: username, password }),
     cache: "no-store",
   });
   if (!res.ok) {
-    const detail = (await res.json().catch(() => null)) as { detail?: string } | null;
-    throw Object.assign(new Error(detail?.detail || "Sign in failed."), {
+    const body = (await res.json().catch(() => null)) as {
+      detail?: string | { message?: string };
+    } | null;
+    const detail = body?.detail;
+    const message = typeof detail === "string" ? detail : detail?.message;
+    throw Object.assign(new Error(message || "Sign in failed."), {
       status: res.status,
     });
   }
-  const body = (await res.json()) as { token?: string; access_token?: string };
-  const token = body.token ?? body.access_token;
-  if (!token) throw Object.assign(new Error("The service returned no token."), { status: 502 });
-  return token;
+  const body = (await res.json()) as { token?: string };
+  if (!body.token) throw Object.assign(new Error("The service returned no token."), { status: 502 });
+  return body.token;
 }
 
 export async function POST(request: NextRequest) {

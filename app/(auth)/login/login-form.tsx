@@ -67,18 +67,19 @@ export function LoginForm() {
           </div>
 
           <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
-            <Field label="Username" htmlFor="username">
+            <Field label="Email" htmlFor="username">
               <div className="relative">
                 <UserRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="username"
                   name="username"
-                  autoComplete="username"
+                  type="email"
+                  autoComplete="email"
                   autoCapitalize="none"
                   spellCheck={false}
                   required
                   className="pl-9"
-                  placeholder="admin"
+                  placeholder="admin@institute.edu"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                 />

@@ -145,7 +145,10 @@ export function RecognitionSection() {
       await api().switchModel(model);
       await qc.invalidateQueries({ queryKey: ["settings"] });
       setDraft(null);
-      toast.success(`Switched to ${model}.`);
+      // The ONNX weights are loaded once per process, so a switch is recorded
+      // now and takes effect on the next restart. Saying so beats a toast that
+      // implies the running engine already changed.
+      toast.success(`${model} will be used after the service restarts.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "The model could not be switched.");
     } finally {

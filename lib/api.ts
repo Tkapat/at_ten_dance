@@ -9,6 +9,7 @@ import type {
   RegisterCheck,
   RegisterPayload,
   RegisterResult,
+  Status,
   Student,
   StudentDetail,
   StudentRow,
@@ -231,7 +232,120 @@ function mapIssues(messages: string[]): { issues: RegisterCheck["issues"]; messa
   return { issues, message: issues.length === 0 ? messages[0] : undefined };
 }
 
-const snake = <T,>(v: T) => JSON.parse(JSON.stringify(v)) as T;
+/* ----------------------------------------------------------- service shapes */
+
+/**
+ * The service is institute-scoped and schema-driven, which is why its payloads
+ * do not look like this app's types: a student's login id is whichever column
+ * the institute chose, the programme is a `course_code` that carries the degree
+ * and department, and `year` is derived from the admission year rather than
+ * stored. The mappings below fold the wire format into the app's own types, so
+ * no component ever sees a field the app does not own.
+ */
+interface WireStudent {
+  id: string;
+  loginId: string;
+  name: string;
+  section: string;
+  admissionYear: number | null;
+  courseCode: string | null;
+  degree: string | null;
+  department: string | null;
+  isActive: boolean;
+  faceStatus: string;
+  claimed: boolean;
+  createdAt: string;
+  extra: Record<string, unknown>;
+}
+
+/** A roster row: the same student plus the numbers SQL computes for today. */
+interface WireRow extends WireStudent {
+  year: number | null;
+  todayStatus: string;
+  monthPct: number;
+  presentDays: number;
+  workingDays: number;
+}
+
+interface WireDay {
+  date: string;
+  status: string;
+  firstSeenAt: string | null;
+  confidence: number | null;
+}
+
+interface WireColumn {
+  key: string;
+  label: string;
+  type: string;
+  required: boolean;
+  system: boolean;
+}
+
+/** The service calls a weekly off day `off`; the app labels it by weekday. */
+function dayStatus(value: string): Status {
+  return (value === "off" ? "sunday" : value) as Status;
+}
+
+function mapRow(row: WireRow): StudentRow {
+  return {
+    id: row.id,
+    enrollmentNo: row.loginId,
+    name: row.name,
+    degree: (row.degree ?? "") as Degree,
+    department: row.department ?? null,
+    section: row.section,
+    year: row.year ?? 1,
+    isActive: row.isActive,
+    todayStatus: dayStatus(row.todayStatus),
+    monthPct: Number(row.monthPct ?? 0),
+    presentDays: row.presentDays,
+    workingDays: row.workingDays,
+  };
+}
+
+/**
+ * Looks one student up in the roster by login id.
+ *
+ * `year`, today's status and the month totals come from SQL functions that only
+ * the roster endpoint exposes, and the login id is the value being searched for,
+ * so this is one extra request behind `getStudent` and `updateStudent` rather
+ * than a re-implementation of the academic-year maths here.
+ */
+async function rosterRow(base: string, id: string, loginId: string): Promise<WireRow | undefined> {
+  const r = await request<{ students: WireRow[] }>(
+    `${base}/students${qs({ search: loginId, joined: "all", limit: 200 })}`,
+  );
+  return r.students.find((row) => row.id === id);
+}
+
+/**
+ * Resolves the programme a degree (and department) names to the course code the
+ * service stores.
+ *
+ * Programmes come from the structure import, so the roster is the only place
+ * they can be read without a new endpoint. A degree that matches nothing is
+ * refused here rather than sent, because the service would answer with a 422
+ * listing the codes it knows.
+ */
+async function programFor(degree: Degree, department: string | null): Promise<string> {
+  const r = await request<{ students: WireRow[] }>(`/students${qs({ joined: "all", limit: 2000 })}`);
+  const wanted = String(degree).trim().toLowerCase();
+  const wantedDept = department?.trim().toLowerCase();
+  const match = r.students.find(
+    (row) =>
+      Boolean(row.courseCode) &&
+      row.degree?.trim().toLowerCase() === wanted &&
+      (wantedDept ? row.department?.trim().toLowerCase() === wantedDept : true),
+  );
+  if (!match?.courseCode) {
+    throw new ApiError(
+      422,
+      "That programme is not in the roster yet. Import the structure first, then set the programme.",
+    );
+  }
+  return match.courseCode;
+}
 
 function createRealApi(): FaceTrackApi {
   return {
@@ -253,71 +367,152 @@ function createRealApi(): FaceTrackApi {
     },
 
     async summary() {
-      const r = await request<{ summary: DashboardSummary }>("/api/reports/summary");
+      const r = await request<{ summary: DashboardSummary }>("/dashboard/summary");
       return r.summary;
     },
 
     async listStudents(filter = {}) {
-      const r = await request<{ students: StudentRow[] }>("/api/reports/students");
-      let rows = r.students;
-      const q = filter.search?.trim().toLowerCase();
-      if (q) {
-        rows = rows.filter(
-          (s) =>
-            s.name.toLowerCase().includes(q) || s.enrollmentNo.toLowerCase().includes(q),
-        );
-      }
-      if (filter.degree) rows = rows.filter((s) => s.degree === filter.degree);
-      if (filter.section) rows = rows.filter((s) => s.section === filter.section);
-      if (filter.year) rows = rows.filter((s) => s.year === filter.year);
-      if (filter.status) rows = rows.filter((s) => s.todayStatus === filter.status);
-      return rows;
+      // The roster endpoint filters in SQL, so the search box and the four
+      // selects narrow the result set instead of the browser narrowing 2000 rows.
+      const r = await request<{ students: WireRow[] }>(
+        `/students${qs({
+          search: filter.search,
+          degree: filter.degree,
+          section: filter.section,
+          year: filter.year,
+          status: filter.status,
+          limit: 2000,
+        })}`,
+      );
+      return r.students.map(mapRow);
     },
 
     async getStudent(id) {
-      return request<StudentDetail>(`/api/reports/student/${id}`);
+      const [detail, year] = await Promise.all([
+        request<{ student: WireStudent }>(`/students/${id}`),
+        request<{ months: YearPoint[] }>(`/students/${id}/yearly`),
+      ]);
+      const s = detail.student;
+      const row = await rosterRow(API_BASE, id, s.loginId);
+
+      const yearPresentDays = year.months.reduce((n, m) => n + m.presentDays, 0);
+      const yearWorkingDays = year.months.reduce((n, m) => n + m.workingDays, 0);
+
+      return {
+        student: {
+          id: s.id,
+          enrollmentNo: s.loginId,
+          name: s.name,
+          degree: (row?.degree ?? s.degree ?? "") as Degree,
+          department: row?.department ?? s.department ?? null,
+          section: s.section,
+          year: row?.year ?? 1,
+          isActive: s.isActive,
+          createdAt: s.createdAt,
+        },
+        todayStatus: row ? dayStatus(row.todayStatus) : ("absent" as Status),
+        monthPct: row?.monthPct ?? 0,
+        presentDays: row?.presentDays ?? 0,
+        workingDays: row?.workingDays ?? 0,
+        yearPct:
+          yearWorkingDays > 0
+            ? Math.round((yearPresentDays / yearWorkingDays) * 1000) / 10
+            : 0,
+        yearPresentDays,
+        yearWorkingDays,
+      } satisfies StudentDetail;
     },
 
     async studentDays(id, month) {
-      const r = await request<{ days: DayRecord[] }>(
-        `/api/reports/student/${id}/days${qs({ month })}`,
+      const r = await request<{ days: WireDay[] }>(
+        `/students/${id}/daily${qs({ month })}`,
       );
-      return r.days;
+      return r.days.map((d) => ({
+        date: d.date,
+        status: dayStatus(d.status),
+        firstSeenAt: d.firstSeenAt ?? undefined,
+        confidence: d.confidence ?? undefined,
+      })) satisfies DayRecord[];
     },
 
     async studentYear(id) {
-      const r = await request<{ months: YearPoint[] }>(`/api/reports/student/${id}/year`);
+      const r = await request<{ months: YearPoint[] }>(`/students/${id}/yearly`);
       return r.months;
     },
 
     async updateStudent(id, patch) {
-      const r = await request<{ student: Student }>(`/api/students/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify(snake(patch)),
-      });
-      return r.student;
+      // A PATCH writes the whole row: the service validates every column of the
+      // institute's schema, and rejects any key it does not own. The login id
+      // therefore goes under whichever key this institute picked for it.
+      const [detail, schemaRes] = await Promise.all([
+        request<{ student: WireStudent }>(`/students/${id}`),
+        request<{ schema: { columns: WireColumn[]; loginKey: string } }>(
+          "/setup/student-schema",
+        ),
+      ]);
+      const current = detail.student;
+      const { columns, loginKey } = schemaRes.schema;
+
+      const body: Record<string, unknown> = {};
+      for (const column of columns) {
+        if (column.key === "name") body.name = current.name;
+        else if (column.key === "course_code") body.course_code = current.courseCode ?? "";
+        else if (column.key === "section") body.section = current.section;
+        else if (column.key === "admission_year") body.admission_year = current.admissionYear ?? "";
+        else body[column.key] = current.extra[column.key] ?? "";
+      }
+
+      if (patch.name !== undefined) body.name = patch.name;
+      if (patch.enrollmentNo !== undefined) body[loginKey] = patch.enrollmentNo;
+      if (patch.section !== undefined) body.section = patch.section;
+
+      if (patch.degree !== undefined && patch.degree !== current.degree) {
+        body.course_code = await programFor(patch.degree, patch.department ?? null);
+      }
+      if (patch.year !== undefined) {
+        const row = await rosterRow(API_BASE, id, current.loginId);
+        const admission = current.admissionYear ?? new Date().getFullYear();
+        if (row?.year) body.admission_year = admission - (patch.year - row.year);
+        else body.admission_year = admission - (patch.year - 1);
+      }
+
+      await request(`/students/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+
+      return {
+        id,
+        enrollmentNo: (patch.enrollmentNo ?? current.loginId).trim().toUpperCase(),
+        name: patch.name ?? current.name,
+        degree: (patch.degree ?? current.degree ?? "") as Degree,
+        department: patch.department === undefined ? current.department : patch.department,
+        section: patch.section ?? current.section,
+        year: patch.year ?? 1,
+        isActive: current.isActive,
+        createdAt: current.createdAt,
+      } satisfies Student;
     },
 
     async deleteStudent(id) {
-      await request(`/api/students/${id}`, { method: "DELETE" });
+      // The service deactivates rather than deleting: attendance rows and audit
+      // entries stay intact, and an inactive student leaves the roster.
+      await request(`/students/${id}/deactivate`, { method: "POST" });
     },
 
     async analytics(segment, month) {
       const r = await request<{ groups: GroupStat[] }>(
-        `/api/reports/groups${qs({ group: segment, month })}`,
+        `/analytics/groups${qs({ group: segment, month })}`,
       );
       return r.groups;
     },
 
     async registerOptions() {
-      return request<RegisterOptions>("/api/register/options");
+      return request<RegisterOptions>("/register/options");
     },
 
     async registerCheck(frame, baseline, targetPose) {
       const fd = new FormData();
       fd.append("frame", frame, "frame.jpg");
       const r = await request<Record<string, unknown>>(
-        `/api/register/check${qs({
+        `/register/check${qs({
           baseline: baseline ?? undefined,
           target_pose: targetPose ?? undefined,
         })}`,
@@ -336,39 +531,62 @@ function createRealApi(): FaceTrackApi {
 
     async registerCommit(payload) {
       const fd = formData(payload);
-      return request<RegisterResult>("/api/register/commit", { method: "POST", body: fd });
+      return request<RegisterResult>("/register/commit", { method: "POST", body: fd });
     },
 
     async reenroll(id, payload) {
       const fd = formData(payload);
-      return request<RegisterResult>(`/api/register/reenroll/${id}`, {
+      return request<RegisterResult>(`/register/reenroll/${id}`, {
         method: "POST",
         body: fd,
       });
     },
 
     async recentlyMarked() {
-      const r = await request<{ attendance: MarkedToday[] }>("/api/attendance/today");
-      return r.attendance;
+      const r = await request<{
+        attendance: {
+          studentId: string;
+          name: string;
+          loginId: string;
+          firstSeenAt: string;
+          status: string;
+          confidence: number | null;
+          source: string;
+        }[];
+      }>("/attendance/today");
+      const today = new Date().toISOString().slice(0, 10);
+      return r.attendance.map((row) => ({
+        // The service keys a mark by (student, day) and sends the day's first
+        // sighting; together they are unique for one day's list.
+        id: `${row.studentId}:${row.firstSeenAt}`,
+        studentId: row.studentId,
+        name: row.name,
+        enrollmentNo: row.loginId,
+        date: today,
+        status: row.status as MarkedToday["status"],
+        firstSeenAt: row.firstSeenAt,
+        confidence: row.confidence,
+        source: row.source,
+      }));
     },
 
     async health() {
       const h = await request<{
         ok: boolean;
         model: { name: string };
-        gallery: { students: number };
+        gallery: { studentsInMemory?: number; students?: number };
         performance: { avg_ms_per_frame: number | null; sessions: number };
-        today: string;
+        server_time_utc: string;
         database: { reachable: boolean };
         uptime_s: number;
       }>("/api/health");
       return {
         ok: h.ok,
         model: h.model.name,
-        galleryStudents: h.gallery.students,
+        galleryStudents: h.gallery.studentsInMemory ?? h.gallery.students ?? 0,
         avgMsPerFrame: h.performance.avg_ms_per_frame,
         sessions: h.performance.sessions,
-        today: h.today,
+        today: h.server_time_utc.slice(0, 10),
         dbReachable: h.database.reachable,
         uptimeSeconds: h.uptime_s,
       };
@@ -392,26 +610,29 @@ function createRealApi(): FaceTrackApi {
     },
 
     async changePassword(current, next) {
-      await request("/api/auth/password", {
+      // The service bumps the token version, so this session is over: the caller
+      // is sent back to the login form rather than left with a dead token.
+      await request("/auth/institute/password", {
         method: "POST",
         body: JSON.stringify({ current, next }),
       });
+      await this.logout();
     },
 
     async getHolidays() {
-      const r = await request<{ holidays: Holiday[] }>("/api/holidays");
+      const r = await request<{ holidays: Holiday[] }>("/holidays");
       return r.holidays;
     },
 
     async addHoliday(date, label) {
-      await request("/api/holidays", {
+      await request("/holidays", {
         method: "POST",
         body: JSON.stringify({ date, label }),
       });
     },
 
     async removeHoliday(date) {
-      await request(`/api/holidays/${date}`, { method: "DELETE" });
+      await request(`/holidays/${date}`, { method: "DELETE" });
     },
 
     streamUrl(token) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -29,6 +30,7 @@ function strength(value: string): number {
 
 export function AccountSection() {
   const { data: session } = useSession();
+  const router = useRouter();
   const [saving, setSaving] = useState(false);
 
   const {
@@ -50,8 +52,9 @@ export function AccountSection() {
     setSaving(true);
     try {
       await api().changePassword(values.current, values.next);
-      toast.success("Password updated.");
+      toast.success("Password updated. Sign in again with the new one.");
       reset({ current: "", next: "", confirm: "" });
+      router.push("/login");
     } catch (err) {
       toast.error(
         err instanceof ApiError ? err.message : "The password could not be changed.",
