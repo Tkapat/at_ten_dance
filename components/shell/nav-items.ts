@@ -1,36 +1,76 @@
 import {
   BarChart3,
+  CalendarCheck,
+  CalendarDays,
   LayoutDashboard,
-  Plus,
   ScanFace,
   Settings,
+  UserRound,
+  Users,
   type LucideIcon,
 } from "lucide-react";
+import type { Role } from "@/lib/types";
 
 export interface NavItem {
   href: string;
   label: string;
   icon: LucideIcon;
-  /** Where it sits in the mobile tab bar (Register is the floating button). */
-  order: number;
+  /** Short label for the mobile tab bar, where width is the constraint. */
+  tabLabel?: string;
 }
 
-export const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "Home", icon: LayoutDashboard, order: 0 },
-  { href: "/scan", label: "Scan", icon: ScanFace, order: 1 },
-  { href: "/register", label: "Register", icon: Plus, order: 2 },
-  { href: "/analytics", label: "Analytics", icon: BarChart3, order: 3 },
-  { href: "/settings", label: "Settings", icon: Settings, order: 4 },
-];
+export type NavGroup = NavItem[];
 
-/** Tab bar shows everything except Register, which becomes the FAB. */
-export const TAB_ITEMS = NAV_ITEMS.filter((i) => i.href !== "/register");
+/**
+ * The nav a signed-in person sees, and only that.
+ *
+ * Built from the session's role rather than filtered from one list, because the
+ * two halves of the app have nothing in common: an admin has no attendance view
+ * of their own, and a student has no console. Rendering a hidden item and
+ * letting `proxy.ts` redirect is a worse answer than not rendering it — a tab
+ * that bounces is a bug the person can see.
+ *
+ * `staff` is an institute account with no Settings and no Setup: those two write
+ * to the institute rather than to the day's attendance.
+ */
+export function navFor(role: Role): NavGroup {
+  if (role === "student") {
+    return [
+      { href: "/me", label: "Home", tabLabel: "Home", icon: LayoutDashboard },
+      { href: "/me/attendance", label: "Attendance", icon: CalendarCheck },
+      { href: "/me/holidays", label: "Holidays", icon: CalendarDays },
+      { href: "/me/profile", label: "Profile", icon: UserRound },
+    ];
+  }
+  const items: NavGroup = [
+    { href: "/", label: "Home", tabLabel: "Home", icon: LayoutDashboard },
+    { href: "/scan", label: "Scan", icon: ScanFace },
+    { href: "/analytics", label: "Analytics", icon: BarChart3 },
+    { href: "/students", label: "Students", tabLabel: "Students", icon: Users },
+  ];
+  if (role === "owner" || role === "admin") {
+    items.push({ href: "/settings", label: "Settings", icon: Settings });
+  }
+  return items;
+}
 
-export function titleForPath(pathname: string): string {
+/**
+ * The page title, from the same source as the nav.
+ *
+ * A title the nav does not describe is a title the person cannot navigate back
+ * from, so anything unrecognised falls back to the app's name rather than
+ * inventing a heading.
+ */
+export function titleForPath(pathname: string, role: Role): string {
+  const items = navFor(role);
+  if (role === "student") {
+    if (pathname === "/me") return "Home";
+  }
   if (pathname === "/") return "Dashboard";
-  if (pathname.startsWith("/students")) return "Student";
-  const match = NAV_ITEMS.find(
-    (i) => i.href !== "/" && (pathname === i.href || pathname.startsWith(`${i.href}/`)),
+  if (pathname.startsWith("/students/")) return "Student";
+  if (pathname.startsWith("/setup")) return "Setup";
+  const match = items.find(
+    (item) => item.href !== "/" && (pathname === item.href || pathname.startsWith(`${item.href}/`)),
   );
   return match?.label ?? "FaceTrack";
 }

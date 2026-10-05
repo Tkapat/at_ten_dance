@@ -15,7 +15,6 @@
  */
 
 export type Cubic = [number, number, number, number];
-
 /** Durations in seconds. */
 export const dur = {
   instant: 0.1,
@@ -71,3 +70,47 @@ export const scale = {
   /** Hover lift. */
   hover: 1.015,
 } as const;
+
+/**
+ * Eased tweens, named.
+ *
+ * The rule at the top of this file says no component defines its own durations
+ * or easings — and a `transition={{ duration: …, ease: … }}` object in a
+ * component is defining them, however carefully it quotes the tokens. Naming the
+ * presets here means a component can only *choose* a motion, and
+ * `scripts/check-motion.mjs` enforces it by failing on any inline transition
+ * object outside this file and `components/motion/`.
+ *
+ * Springs are the other half of the vocabulary and are used the same way:
+ * `transition={spring.snappy}`.
+ */
+export const tween = {
+  /** Press and release — the fastest thing in the app. */
+  tap: { duration: dur.fast },
+  /** Feedback: icon swaps, error text, status changes. */
+  tick: { duration: dur.fast, ease: ease.out },
+  /** What reduced motion gets instead of a real tween. */
+  instant: { duration: dur.instant, ease: ease.out },
+  /** Enter: the default for anything appearing. */
+  enter: { duration: dur.base, ease: ease.out },
+  /** Exit: ~70% of `enter`, per the rule above. */
+  exit: { duration: dur.fast, ease: ease.in },
+  /** Slower enter, for hero moments. */
+  slow: { duration: dur.slow, ease: ease.out },
+  /** Count-ups and ring fills, which run for the length of the value change. */
+  count: { duration: dur.count, ease: ease.out },
+  /** Nothing moves at all: a state that must not animate. */
+  none: { duration: 0 },
+} as const;
+
+/**
+ * `tween`, held back by a delay.
+ *
+ * Delay cannot be a preset — every stagger delays by a different amount — so it
+ * is composed onto one instead of the component writing an object of its own.
+ * Delay is not scaled by reduced motion; `dur.base` is already a token, and a
+ * stagger that waits longer is not motion, it is waiting.
+ */
+export function after(t: { duration: number; ease?: Cubic }, delaySeconds: number) {
+  return delaySeconds > 0 ? { ...t, delay: delaySeconds } : t;
+}

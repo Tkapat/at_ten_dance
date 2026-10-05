@@ -3,7 +3,7 @@ import { m } from "framer-motion";
 import { AlertCircle, Inbox, RefreshCw } from "lucide-react";
 import { Button } from "./button";
 import { cn } from "@/lib/utils";
-import { dur, ease } from "@/lib/motion";
+import { tween } from "@/lib/motion";
 
 function Frame({
   icon,
@@ -22,7 +22,7 @@ function Frame({
     <m.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: dur.base, ease: ease.out }}
+      transition={tween.enter}
       className={cn(
         "flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-border px-6 py-12 text-center",
         className,

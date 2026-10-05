@@ -1,22 +1,39 @@
+import type { components } from "./api-types";
 import type {
+  ClaimCompleteInput,
+  ClaimVerifyInput,
+  ClaimVerifyResult,
   DashboardSummary,
   DayRecord,
   GroupStat,
   HealthStatus,
   Holiday,
+  ImportCommit,
+  ImportKind,
+  ImportPreview,
+  InstituteSettings,
+  InstituteSignupInput,
+  ManualMarkInput,
   MarkedToday,
+  Program,
+  PublicInstitute,
   RecognitionSettings,
   RegisterCheck,
   RegisterPayload,
   RegisterResult,
+  Session,
+  SetupStatus,
   Status,
   Student,
   StudentDetail,
   StudentRow,
+  StudentSchema,
+  StudentSchemaInput,
+  StudentSelf,
   Track,
 } from "./types";
 import type { Degree, Pose } from "./constants";
-import { API_BASE, USE_MOCK, WS_BASE } from "./env";
+import { API_BASE, proxied, USE_MOCK, WS_BASE } from "./env";
 import { createMockApi } from "./mock";
 import { clearToken, ensureToken, getToken } from "./token";
 
@@ -33,6 +50,9 @@ import { clearToken, ensureToken, getToken } from "./token";
 export { API_BASE, USE_MOCK, WS_BASE } from "./env";
 
 export type Segment = "department" | "degree" | "section" | "year";
+
+/** @deprecated Use {@link ApiClient}. Kept so older imports keep compiling. */
+export type FaceTrackApi = ApiClient;
 
 export interface StudentFilter {
   search?: string;
@@ -69,46 +89,164 @@ export class ApiError extends Error {
   }
 }
 
-export interface FaceTrackApi {
-  login(username: string, password: string): Promise<{ username: string }>;
+/**
+ * One typed client for the whole app, and the only place that knows the wire
+ * format. Components never call `fetch`.
+ *
+ * `ApiClient` is the seam the two adapters meet at: `createMockApi()` and
+ * `createRealApi()` implement every method below, so a screen built against the
+ * mock cannot quietly depend on something only one of them has. Every shape on
+ * the wire comes from `lib/api-types.ts`, generated from the service's own
+ * OpenAPI schema, so this file is where "what does the service actually say?"
+ * is answered in one place.
+ *
+ * A method returns the app's own type where it has one (`StudentRow`), and the
+ * service's type where it does not (`SetupStatus`, `StudentSelf`). Nothing is
+ * renamed twice.
+ */
+export interface ApiClient {
+  /* ---------------------------------------------------------------- session */
+  /**
+   * What an institute code says about the institute behind it: its name, whether
+   * it is accepting students, and the two labels its student form has to ask for.
+   *
+   * The only call in the app that needs no session, and the first one a student
+   * ever makes. It answers 404 with one message for every wrong code.
+   */
+  publicInstitute(code: string): Promise<PublicInstitute>;
+  /** Institute sign-in by email. Sets the session cookie. */
+  login(email: string, password: string): Promise<Session>;
+  /** Student sign-in: code, then the institute's login id, then the password. */
+  loginStudent(code: string, loginId: string, password: string): Promise<Session>;
+  /** Create an institute and its owner. Answers with the code it was given. */
+  signupInstitute(input: InstituteSignupInput): Promise<Session>;
+  /**
+   * Step one of claiming an account: the institute code, the login id and the
+   * verification value. Answers with a single-use claim token and the details
+   * shown on the confirm screen — and one generic failure for every reason, so
+   * it cannot be used to find out whether an id exists.
+   */
+  claimVerify(input: ClaimVerifyInput): Promise<ClaimVerifyResult>;
+  /** Step two: creates the account and signs the student in. */
+  claimComplete(input: ClaimCompleteInput): Promise<Session>;
   logout(): Promise<void>;
+  /** The signed-in session, read back from the httpOnly cookie. */
+  session(): Promise<Session>;
 
+  /* -------------------------------------------------------- institute setup */
+  /** Where this institute is in its own setup, and what is still missing. */
+  setupStatus(): Promise<SetupStatus>;
+  /** The programmes imported from the structure file. Empty before the import. */
+  structure(): Promise<Program[]>;
+  /** The institute's student columns, and which two of them matter. */
+  studentSchema(): Promise<StudentSchema>;
+  saveStudentSchema(schema: StudentSchemaInput): Promise<StudentSchema>;
+  /** Academic calendar, weekly off, timezone, and whether self-enrolment is on. */
+  instituteSettings(): Promise<InstituteSettings>;
+  saveInstituteSettings(patch: Partial<InstituteSettings>): Promise<InstituteSettings>;
+
+  /* ---------------------------------------------------------------- imports */
+  /** The template spreadsheet for one import kind, as a file. */
+  importTemplate(kind: ImportKind): Promise<Blob>;
+  /** Validate a spreadsheet without writing anything. */
+  importPreview(kind: ImportKind, file: File): Promise<ImportPreview>;
+  /** Apply a previewed job. `skipInvalid` writes the valid rows only. */
+  importCommit(kind: ImportKind, jobId: string, skipInvalid: boolean): Promise<ImportCommit>;
+  /** Where the row-by-row error report can be downloaded from. */
+  importErrorsUrl(kind: ImportKind, jobId: string): string;
+
+  /* ---------------------------------------------------------------- students */
   summary(): Promise<DashboardSummary>;
   listStudents(filter?: StudentFilter): Promise<StudentRow[]>;
   getStudent(id: string): Promise<StudentDetail>;
+  /** Write one student from the institute's own column keys. */
+  createStudent(values: Record<string, string | number | null>): Promise<{ id: string; name: string }>;
+  /** Write one student's whole record, again in the institute's column keys. */
+  patchStudent(id: string, values: Record<string, string | number | null>): Promise<void>;
+  /** The app-shaped edit, kept for the modal that predates the column form. */
+  updateStudent(id: string, patch: Partial<Student>): Promise<Student>;
+  /** Soft removal: history stays, and the student stops being recognised. */
+  deleteStudent(id: string): Promise<void>;
+  reactivateStudent(id: string): Promise<void>;
+  /** Clear the password and the claim, so the student claims the account again. */
+  resetStudentAccess(id: string): Promise<void>;
+  /** Remove the stored face so the student (or an admin) can enrol again. */
+  unlockStudentFace(id: string): Promise<void>;
+
+  /* ---------------------------------------------------------------- reports */
+  analytics(segment: Segment, month: string): Promise<GroupStat[]>;
+  /** Everyone with today's status, for the roster card's polling. */
+  dashboardStudents(): Promise<StudentRow[]>;
+  recentlyMarked(): Promise<MarkedToday[]>;
   studentDays(id: string, month: string): Promise<DayRecord[]>;
   studentYear(id: string): Promise<YearPoint[]>;
-  updateStudent(id: string, patch: Partial<Student>): Promise<Student>;
-  deleteStudent(id: string): Promise<void>;
+  /** One day written by a person. Source becomes `manual`, and shows as such. */
+  markAttendance(input: ManualMarkInput): Promise<void>;
+  clearAttendance(id: string, date: string): Promise<void>;
+  /** Where a date range of attendance can be downloaded from. */
+  exportCsvUrl(from: string, to: string): string;
 
-  analytics(segment: Segment, month: string): Promise<GroupStat[]>;
+  /* --------------------------------------------------------- student portal */
+  /** The signed-in student's own record, including their extra columns. */
+  me(): Promise<StudentSelf>;
+  meSummary(): Promise<{
+    monthPct: number;
+    monthPresent: number;
+    monthWorking: number;
+    yearPct: number;
+    yearPresent: number;
+    yearWorking: number;
+    todayStatus: Status | "working" | "off";
+    firstSeenAt?: string;
+    confidence?: number;
+  }>;
+  meAttendance(month: string): Promise<DayRecord[]>;
+  meHolidays(): Promise<Holiday[]>;
+  changeOwnPassword(current: string, next: string): Promise<void>;
+  /** One frame of self-enrolment guidance. */
+  faceCheck(frame: Blob, baseline?: number | null): Promise<RegisterCheck>;
+  /** Store the student's own face. Allowed once. */
+  faceCommit(frames: Blob[]): Promise<{ stored: number; poses: string[] }>;
 
+  /* ---------------------------------------------------- admin-assisted enrol */
   registerOptions(): Promise<RegisterOptions>;
-  registerCheck(
-    frame: Blob,
-    baseline?: number | null,
-    targetPose?: Pose,
-  ): Promise<RegisterCheck>;
+  registerCheck(frame: Blob, baseline?: number | null, targetPose?: Pose): Promise<RegisterCheck>;
   registerCommit(payload: RegisterPayload): Promise<RegisterResult>;
-  reenroll(
-    id: string,
-    payload: RegisterPayload,
-  ): Promise<RegisterResult>;
+  reenroll(id: string, payload: RegisterPayload): Promise<RegisterResult>;
 
-  recentlyMarked(): Promise<MarkedToday[]>;
+  /* --------------------------------------------------------------- settings */
   health(): Promise<HealthStatus>;
-
   getSettings(): Promise<RecognitionSettings>;
   saveSettings(patch: Partial<RecognitionSettings>): Promise<RecognitionSettings>;
   switchModel(model: string): Promise<void>;
   changePassword(current: string, next: string): Promise<void>;
 
+  /* ---------------------------------------------------------------- holidays */
   getHolidays(): Promise<Holiday[]>;
   addHoliday(date: string, label: string): Promise<void>;
   removeHoliday(date: string): Promise<void>;
 
-  /** The websocket the Scan page opens. Only available in the browser. */
-  streamUrl(token: string): string;
+  /* ------------------------------------------------------------------- scan */
+  /**
+   * The WebSocket the Scan page opens. Only available in the browser, and the
+   * only call that does not go through the proxy: a WebSocket handshake cannot
+   * carry an Authorization header, so the token travels in the query string.
+   */
+  streamUrl(token: string, scope?: ScanScope): string;
+}
+
+/**
+ * Narrows a scan to one group. Every field is optional; "Everyone" is all of
+ * them absent. The year is a year of the programme ("third year"), and the
+ * service converts it to admission years, because only an institute account may
+ * read the academic year it depends on.
+ */
+export interface ScanScope {
+  degree?: string;
+  department?: string;
+  program?: string;
+  section?: string;
+  currentYear?: number;
 }
 
 export interface RegisterOptions {
@@ -130,24 +268,36 @@ async function readToken(): Promise<string | null> {
   return ensureToken();
 }
 
+/**
+ * One call to the service.
+ *
+ * `raw` hands back the response body untouched, for the endpoints that answer
+ * with a file rather than JSON: the import templates and the error reports.
+ */
 async function request<T>(
   path: string,
   init: RequestInit = {},
-  base = API_BASE,
+  base?: string,
+  raw = false,
 ): Promise<T> {
-  const token = await readToken();
+  // No Authorization header here: the proxy reads the cookie and attaches the
+  // bearer token itself, so the browser never holds the service token for a REST
+  // call. `base` is only set for the handful of links the browser fetches
+  // directly, which is why those pass the header themselves.
+  const token = base ? await readToken() : null;
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  // Free ngrok tiers serve an HTML interstitial to browser requests, which the
-  // browser then reports as a CORS error. This header is their documented opt-out.
-  headers.set("ngrok-skip-browser-warning", "1");
   if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
 
   let res: Response;
   try {
-    res = await fetch(`${base}${path}`, { ...init, headers, cache: "no-store" });
+    res = await fetch(base ? `${base}${path}` : proxied(path), {
+      ...init,
+      headers,
+      cache: "no-store",
+    });
   } catch {
     throw new ApiError(0, "Cannot reach the FaceTrack service.");
   }
@@ -159,6 +309,11 @@ async function request<T>(
       window.location.replace(`/login?next=${next}`);
     }
     throw new ApiError(401, "Your session has expired. Please sign in again.");
+  }
+
+  if (raw) {
+    if (!res.ok) throw new ApiError(res.status, `Request failed (${res.status}).`);
+    return (await res.blob()) as T;
   }
 
   const text = await res.text();
@@ -201,6 +356,56 @@ async function request<T>(
   return body as T;
 }
 
+/**
+ * A call to one of this app's own route handlers.
+ *
+ * Used for the four session calls and nothing else: those are the ones that set
+ * a cookie, which only a server can do. Everything else is proxied to the
+ * service, so the browser talks to one origin.
+ */
+async function bff<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const parsed = (await res.json().catch(() => null)) as
+    | { error?: string; message?: string }
+    | null;
+  if (!res.ok) {
+    throw new ApiError(res.status, parsed?.message || parsed?.error || "Request failed.");
+  }
+  return parsed as T;
+}
+
+/**
+ * A file from the service, fetched by the browser itself.
+ *
+ * Used for the three things that are downloads rather than data: the import
+ * template, an import error report and the attendance export. They bypass the
+ * proxy because the browser, not this app, decides what to do with the body — and
+ * a file the browser saved needs the name the service gave it.
+ */
+async function directBlob(path: string): Promise<Blob> {
+  const token = await readToken();
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(`${API_BASE}${path}`, { headers, cache: "no-store" });
+  if (!res.ok) throw new ApiError(res.status, "That file could not be downloaded.");
+  return res.blob();
+}
+
+/**
+ * An absolute URL, for the few calls the browser makes directly.
+ *
+ * Three of them, and each for a reason a route handler cannot serve: an import
+ * template and an error report are files the browser saves under their own name,
+ * and the attendance export is a download. Everything else is proxied.
+ */
+export function apiUrl(path: string): string {
+  return `${API_BASE}${path}`;
+}
+
 function qs(params: Record<string, string | number | undefined | null>): string {
   const sp = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
@@ -223,6 +428,19 @@ const ISSUE_PATTERNS: [RegExp, string][] = [
   [/too bright/i, "too_bright"],
 ];
 
+/** The service answers both capture endpoints with the same quality dict. */
+function qualityResult(r: Record<string, unknown>): RegisterCheck {
+  const raw = (r.issues as string[] | undefined) ?? [];
+  const mapped = mapIssues(raw);
+  return {
+    ok: Boolean(r.ok),
+    issues: mapped.issues,
+    pose: (r.pose as Pose | null) ?? null,
+    faceBox: (r.face_box as [number, number, number, number] | null) ?? null,
+    message: mapped.message ?? (r.ok ? undefined : raw[0]),
+  };
+}
+
 function mapIssues(messages: string[]): { issues: RegisterCheck["issues"]; message?: string } {
   const issues: RegisterCheck["issues"] = [];
   for (const m of messages) {
@@ -242,44 +460,32 @@ function mapIssues(messages: string[]): { issues: RegisterCheck["issues"]; messa
  * stored. The mappings below fold the wire format into the app's own types, so
  * no component ever sees a field the app does not own.
  */
-interface WireStudent {
-  id: string;
-  loginId: string;
-  name: string;
-  section: string;
-  admissionYear: number | null;
-  courseCode: string | null;
-  degree: string | null;
-  department: string | null;
-  isActive: boolean;
-  faceStatus: string;
-  claimed: boolean;
-  createdAt: string;
-  extra: Record<string, unknown>;
-}
+/**
+ * Roster rows, student records, days and columns are read from the generated
+ * schema rather than copied out of the service's SQL, so a renamed column is a
+ * compile error rather than a blank cell.
+ */
+type WireStudent = components["schemas"]["AdminStudent"];
+type WireRow = components["schemas"]["RosterRow"];
+type WireDay = components["schemas"]["DayRow"];
+type WireColumn = components["schemas"]["SchemaColumn"];
 
-/** A roster row: the same student plus the numbers SQL computes for today. */
-interface WireRow extends WireStudent {
-  year: number | null;
-  todayStatus: string;
-  monthPct: number;
-  presentDays: number;
-  workingDays: number;
-}
-
-interface WireDay {
-  date: string;
-  status: string;
-  firstSeenAt: string | null;
-  confidence: number | null;
-}
-
-interface WireColumn {
-  key: string;
-  label: string;
-  type: string;
-  required: boolean;
-  system: boolean;
+/** The dashboard's lighter row, mapped onto the app's roster row. */
+function mapDashboardRow(row: components["schemas"]["DashboardStudent"]): StudentRow {
+  return {
+    id: row.id,
+    enrollmentNo: row.loginId,
+    name: row.name,
+    degree: "" as Degree,
+    department: null,
+    section: row.section,
+    year: 1,
+    isActive: true,
+    todayStatus: dayStatus(row.todayStatus ?? "absent"),
+    monthPct: Number(row.monthPct ?? 0),
+    presentDays: row.presentDays,
+    workingDays: row.workingDays,
+  };
 }
 
 /** The service calls a weekly off day `off`; the app labels it by weekday. */
@@ -297,7 +503,7 @@ function mapRow(row: WireRow): StudentRow {
     section: row.section,
     year: row.year ?? 1,
     isActive: row.isActive,
-    todayStatus: dayStatus(row.todayStatus),
+    todayStatus: dayStatus(row.todayStatus ?? "absent"),
     monthPct: Number(row.monthPct ?? 0),
     presentDays: row.presentDays,
     workingDays: row.workingDays,
@@ -312,9 +518,9 @@ function mapRow(row: WireRow): StudentRow {
  * so this is one extra request behind `getStudent` and `updateStudent` rather
  * than a re-implementation of the academic-year maths here.
  */
-async function rosterRow(base: string, id: string, loginId: string): Promise<WireRow | undefined> {
+async function rosterRow(id: string, loginId: string): Promise<WireRow | undefined> {
   const r = await request<{ students: WireRow[] }>(
-    `${base}/students${qs({ search: loginId, joined: "all", limit: 200 })}`,
+    `/students${qs({ search: loginId, joined: "all", limit: 200 })}`,
   );
   return r.students.find((row) => row.id === id);
 }
@@ -323,47 +529,74 @@ async function rosterRow(base: string, id: string, loginId: string): Promise<Wir
  * Resolves the programme a degree (and department) names to the course code the
  * service stores.
  *
- * Programmes come from the structure import, so the roster is the only place
- * they can be read without a new endpoint. A degree that matches nothing is
- * refused here rather than sent, because the service would answer with a 422
- * listing the codes it knows.
+ * Read from the structure list rather than from the roster: a programme with no
+ * students yet is still a real programme, and it is exactly that case an admin
+ * hits when adding the first student after importing the structure.
  */
 async function programFor(degree: Degree, department: string | null): Promise<string> {
-  const r = await request<{ students: WireRow[] }>(`/students${qs({ joined: "all", limit: 2000 })}`);
+  const r = await request<{ programs: Program[] }>("/setup/structure");
   const wanted = String(degree).trim().toLowerCase();
   const wantedDept = department?.trim().toLowerCase();
-  const match = r.students.find(
-    (row) =>
-      Boolean(row.courseCode) &&
-      row.degree?.trim().toLowerCase() === wanted &&
-      (wantedDept ? row.department?.trim().toLowerCase() === wantedDept : true),
+  const match = r.programs.find(
+    (program) =>
+      program.degree.trim().toLowerCase() === wanted &&
+      (wantedDept ? (program.department ?? "").trim().toLowerCase() === wantedDept : true),
   );
-  if (!match?.courseCode) {
+  if (!match) {
     throw new ApiError(
       422,
-      "That programme is not in the roster yet. Import the structure first, then set the programme.",
+      "That programme is not in the structure yet. Import the structure first, then set the programme.",
     );
   }
   return match.courseCode;
 }
 
-function createRealApi(): FaceTrackApi {
+function createRealApi(): ApiClient {
   return {
-    async login(username, password) {
-      const res = await fetch("/api/auth/login", {
+    async publicInstitute(code) {
+      // No session: this is the call that comes before there is one.
+      return request<PublicInstitute>(`/public/institutes/${code.trim().toUpperCase()}`);
+    },
+
+    /*
+     * The four session calls go through Next route handlers rather than straight
+     * to the service, because the httpOnly cookie has to be set server-side: a
+     * browser cannot keep a session token where a script cannot read it. Each
+     * handler forwards to the service, adopts the token it gets back and answers
+     * with the whole session, so the app never has to ask who it is a second time.
+     */
+    async login(email, password) {
+      return bff<Session>("/api/auth/login", { username: email, password });
+    },
+
+    async loginStudent(code, loginId, password) {
+      return bff<Session>("/api/auth/student", { code, loginId, password });
+    },
+
+    async signupInstitute(input) {
+      return bff<Session>("/api/auth/signup", input);
+    },
+
+    async claimVerify(input) {
+      // Public endpoint, no session yet: it goes to the service directly.
+      return request<ClaimVerifyResult>("/auth/student/claim/verify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify(input),
       });
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      if (!res.ok) {
-        throw new ApiError(res.status, body?.error || "Sign in failed.");
-      }
-      return { username: username };
+    },
+
+    async claimComplete(input) {
+      return bff<Session>("/api/auth/claim", input);
     },
 
     async logout() {
       await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    },
+
+    async session() {
+      const res = await fetch("/api/auth/session", { cache: "no-store" });
+      if (!res.ok) throw new ApiError(res.status, "Not signed in.");
+      return (await res.json()) as Session;
     },
 
     async summary() {
@@ -393,7 +626,7 @@ function createRealApi(): FaceTrackApi {
         request<{ months: YearPoint[] }>(`/students/${id}/yearly`),
       ]);
       const s = detail.student;
-      const row = await rosterRow(API_BASE, id, s.loginId);
+      const row = await rosterRow(id, s.loginId);
 
       const yearPresentDays = year.months.reduce((n, m) => n + m.presentDays, 0);
       const yearWorkingDays = year.months.reduce((n, m) => n + m.workingDays, 0);
@@ -408,9 +641,9 @@ function createRealApi(): FaceTrackApi {
           section: s.section,
           year: row?.year ?? 1,
           isActive: s.isActive,
-          createdAt: s.createdAt,
+          createdAt: s.createdAt ?? undefined,
         },
-        todayStatus: row ? dayStatus(row.todayStatus) : ("absent" as Status),
+        todayStatus: row ? dayStatus(row.todayStatus ?? "absent") : ("absent" as Status),
         monthPct: row?.monthPct ?? 0,
         presentDays: row?.presentDays ?? 0,
         workingDays: row?.workingDays ?? 0,
@@ -453,13 +686,13 @@ function createRealApi(): FaceTrackApi {
       const current = detail.student;
       const { columns, loginKey } = schemaRes.schema;
 
-      const body: Record<string, unknown> = {};
+      const body: Record<string, string | number | null> = {};
       for (const column of columns) {
         if (column.key === "name") body.name = current.name;
         else if (column.key === "course_code") body.course_code = current.courseCode ?? "";
         else if (column.key === "section") body.section = current.section;
         else if (column.key === "admission_year") body.admission_year = current.admissionYear ?? "";
-        else body[column.key] = current.extra[column.key] ?? "";
+        else body[column.key] = String(current.extra[column.key] ?? "");
       }
 
       if (patch.name !== undefined) body.name = patch.name;
@@ -470,13 +703,13 @@ function createRealApi(): FaceTrackApi {
         body.course_code = await programFor(patch.degree, patch.department ?? null);
       }
       if (patch.year !== undefined) {
-        const row = await rosterRow(API_BASE, id, current.loginId);
+        const row = await rosterRow(id, current.loginId);
         const admission = current.admissionYear ?? new Date().getFullYear();
         if (row?.year) body.admission_year = admission - (patch.year - row.year);
         else body.admission_year = admission - (patch.year - 1);
       }
 
-      await request(`/students/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+      await this.patchStudent(id, body);
 
       return {
         id,
@@ -487,7 +720,7 @@ function createRealApi(): FaceTrackApi {
         section: patch.section ?? current.section,
         year: patch.year ?? 1,
         isActive: current.isActive,
-        createdAt: current.createdAt,
+        createdAt: current.createdAt ?? undefined,
       } satisfies Student;
     },
 
@@ -511,22 +744,15 @@ function createRealApi(): FaceTrackApi {
     async registerCheck(frame, baseline, targetPose) {
       const fd = new FormData();
       fd.append("frame", frame, "frame.jpg");
-      const r = await request<Record<string, unknown>>(
-        `/register/check${qs({
-          baseline: baseline ?? undefined,
-          target_pose: targetPose ?? undefined,
-        })}`,
-        { method: "POST", body: fd },
+      return qualityResult(
+        await request<Record<string, unknown>>(
+          `/register/check${qs({
+            baseline: baseline ?? undefined,
+            target_pose: targetPose ?? undefined,
+          })}`,
+          { method: "POST", body: fd },
+        ),
       );
-      const raw = (r.issues as string[] | undefined) ?? [];
-      const mapped = mapIssues(raw);
-      return {
-        ok: Boolean(r.ok),
-        issues: mapped.issues,
-        pose: (r.pose as Pose | null) ?? null,
-        faceBox: (r.face_box as [number, number, number, number] | null) ?? null,
-        message: mapped.message ?? (r.ok ? undefined : raw[0]),
-      };
     },
 
     async registerCommit(payload) {
@@ -635,8 +861,200 @@ function createRealApi(): FaceTrackApi {
       await request(`/holidays/${date}`, { method: "DELETE" });
     },
 
-    streamUrl(token) {
-      return `${WS_BASE}/ws/recognize?token=${encodeURIComponent(token)}`;
+    /* ------------------------------------------------------ institute setup */
+    async setupStatus() {
+      return request<SetupStatus>("/setup/status");
+    },
+
+    async structure() {
+      const r = await request<{ programs: Program[] }>("/setup/structure");
+      return r.programs;
+    },
+
+    async studentSchema() {
+      const r = await request<{ schema: StudentSchema }>("/setup/student-schema");
+      return r.schema;
+    },
+
+    async saveStudentSchema(schema) {
+      const r = await request<{ schema: StudentSchema }>("/setup/student-schema", {
+        method: "PUT",
+        body: JSON.stringify(schema),
+      });
+      return r.schema;
+    },
+
+    async instituteSettings() {
+      // The calendar lives in the setup status, which is the one place that reads
+      // it; `institution/settings` only writes. Composing the read here keeps the
+      // two halves in one file rather than in two callers.
+      const status = await this.setupStatus();
+      return {
+        academicYearStart: status.status.calendar.academicYearStart ?? null,
+        academicYearEnd: status.status.calendar.academicYearEnd ?? null,
+        weeklyOff: status.status.calendar.weeklyOff ?? null,
+        timezone: status.institute.timezone,
+        faceSelfEnroll: (status.institute.settings.face_self_enroll as boolean | undefined) ?? true,
+      } satisfies InstituteSettings;
+    },
+
+    async saveInstituteSettings(patch) {
+      const r = await request<{ settings: InstituteSettings }>("/institution/settings", {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      });
+      return r.settings;
+    },
+
+    /* -------------------------------------------------------------- imports */
+    async importTemplate(kind) {
+      // Fetched directly, not proxied: the response is a file the browser saves
+      // under the name the service gives it, and a proxy that buffers it would
+      // have to invent that name.
+      return directBlob(`/setup/templates/${kind}`);
+    },
+
+    async importPreview(kind, file) {
+      const fd = new FormData();
+      fd.append("file", file, file.name);
+      return request<ImportPreview>(`/setup/${kind}/preview`, { method: "POST", body: fd });
+    },
+
+    async importCommit(kind, jobId, skipInvalid) {
+      return request<ImportCommit>(`/setup/${kind}/commit`, {
+        method: "POST",
+        body: JSON.stringify({ jobId, skipInvalid }),
+      });
+    },
+
+    importErrorsUrl(kind, jobId) {
+      return apiUrl(`/setup/${kind}/jobs/${jobId}/errors.csv`);
+    },
+
+    /* ------------------------------------------------------- student writes */
+    async createStudent(values) {
+      const r = await request<{ student: { id: string; name: string } }>("/students", {
+        method: "POST",
+        body: JSON.stringify(values),
+      });
+      return r.student;
+    },
+
+    async patchStudent(id, values) {
+      await request(`/students/${id}`, { method: "PATCH", body: JSON.stringify(values) });
+    },
+
+    async reactivateStudent(id) {
+      await request(`/students/${id}/reactivate`, { method: "POST" });
+    },
+
+    async resetStudentAccess(id) {
+      await request(`/students/${id}/reset-access`, { method: "POST" });
+    },
+
+    async unlockStudentFace(id) {
+      await request(`/students/${id}/unlock-face`, { method: "POST" });
+    },
+
+    /* -------------------------------------------------------------- reports */
+    async dashboardStudents() {
+      const r = await request<{ students: components["schemas"]["DashboardStudent"][] }>(
+        "/dashboard/students",
+      );
+      return r.students.map((row) => mapDashboardRow(row));
+    },
+
+    async markAttendance(input) {
+      await request("/attendance/manual", { method: "PUT", body: JSON.stringify(input) });
+    },
+
+    async clearAttendance(id, date) {
+      await request(`/attendance/${id}/${date}`, { method: "DELETE" });
+    },
+
+    exportCsvUrl(from, to) {
+      return apiUrl(`/export/attendance.csv${qs({ from, to })}`);
+    },
+
+    /* ------------------------------------------------------- student portal */
+    async me() {
+      const r = await request<{ student: StudentSelf }>("/me");
+      return r.student;
+    },
+
+    async meSummary() {
+      const r = await request<{ summary: components["schemas"]["MeSummaryBody"] }>("/me/summary");
+      const s = r.summary;
+      return {
+        monthPct: s.monthPct,
+        monthPresent: s.monthPresent,
+        monthWorking: s.monthWorking,
+        yearPct: s.yearPct,
+        yearPresent: s.yearPresent,
+        yearWorking: s.yearWorking,
+        todayStatus: s.todayStatus as Status | "working" | "off",
+        firstSeenAt: s.firstSeenAt ?? undefined,
+        confidence: s.confidence ?? undefined,
+      };
+    },
+
+    async meAttendance(month) {
+      const r = await request<{ days: components["schemas"]["MeDayRow"][] }>(
+        `/me/attendance${qs({ month })}`,
+      );
+      return r.days.map((d) => ({
+        date: d.date,
+        status: dayStatus(d.status),
+        firstSeenAt: d.firstSeenAt ?? undefined,
+        confidence: d.confidence ?? undefined,
+      }));
+    },
+
+    async meHolidays() {
+      const today = new Date().toISOString().slice(0, 10);
+      const from = new Date(Date.now() - 120 * 864e5).toISOString().slice(0, 10);
+      const r = await request<{ holidays: Holiday[] }>(`/me/holidays${qs({ from, to: today })}`);
+      return r.holidays;
+    },
+
+    async changeOwnPassword(current, next) {
+      await request("/me/password", {
+        method: "POST",
+        body: JSON.stringify({ current, next }),
+      });
+      await this.logout();
+    },
+
+    async faceCheck(frame, baseline) {
+      const fd = new FormData();
+      fd.append("frame", frame, "frame.jpg");
+      return qualityResult(
+        await request<Record<string, unknown>>(
+          `/me/face/check${qs({ baseline: baseline ?? undefined })}`,
+          { method: "POST", body: fd },
+        ),
+      );
+    },
+
+    async faceCommit(frames) {
+      const fd = new FormData();
+      frames.forEach((frame, i) => fd.append("frames", frame, `frame-${i}.jpg`));
+      return request<{ ok: boolean; stored: number; poses: string[] }>("/me/face/commit", {
+        method: "POST",
+        body: fd,
+      });
+    },
+
+    streamUrl(token, scope) {
+      const params = qs({
+        token,
+        degree: scope?.degree,
+        department: scope?.department,
+        program: scope?.program,
+        section: scope?.section,
+        currentYear: scope?.currentYear,
+      });
+      return `${WS_BASE}/ws/recognize${params}`;
     },
   };
 
@@ -655,10 +1073,12 @@ function createRealApi(): FaceTrackApi {
   }
 }
 
-let instance: FaceTrackApi | null = null;
+let instance: ApiClient | null = null;
 
-export function api(): FaceTrackApi {
-  if (!instance) instance = USE_MOCK ? createMockApi() : createRealApi();
+export function api(): ApiClient {
+  // The two assignments are the same type; the assertion is only there because
+  // the compiler cannot see through the lazy initialisation.
+  if (!instance) instance = (USE_MOCK ? createMockApi() : createRealApi()) as ApiClient;
   return instance;
 }
 

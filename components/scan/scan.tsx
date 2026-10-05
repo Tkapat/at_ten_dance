@@ -1,5 +1,6 @@
 "use client";
 
+import { after, tween } from "@/lib/motion";
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "next-themes";
@@ -91,11 +92,10 @@ export function Scan() {
                 className="pointer-events-none absolute right-3 top-3 rounded-full bg-black/55 px-3 py-1.5 text-[11px] tabular-nums text-white/85 backdrop-blur-sm"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{
-                  duration: mpref.t(dur.fast),
-                  delay: mpref.reduced ? 0 : dur.base,
-                  ease: ease.out,
-                }}
+                transition={after(
+                  mpref.reduced ? tween.instant : tween.tick,
+                  mpref.reduced ? 0 : dur.base,
+                )}
               >
                 {stream.stats.ms !== null ? `${Math.round(stream.stats.ms)} ms` : "—"}
                 {" · "}
@@ -129,7 +129,7 @@ export function Scan() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: mpref.t(dur.fast), ease: ease.out }}
+              transition={mpref.reduced ? tween.instant : tween.tick}
               className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center"
             >
               {stream.status === "starting" ? (

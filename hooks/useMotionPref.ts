@@ -40,7 +40,7 @@ function subscribeOs(onChange: () => void): () => void {
  *   <m.div
  *     initial={{ opacity: 0, y: m.y(8) }}
  *     animate={{ opacity: 1, y: 0 }}
- *     transition={{ duration: m.t(dur.base), ease: ease.out }}
+ *     transition={tween.enter}  // durations live in lib/motion.ts, not here
  *   />
  *
  * When motion is reduced, `t()` yields `dur.instant` (a 100 ms fade rather

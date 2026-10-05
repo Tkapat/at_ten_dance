@@ -14,7 +14,7 @@ import {
 } from "recharts";
 import { ChevronLeft, ChevronRight, TrendingDown, TrendingUp } from "lucide-react";
 import { api, type Segment } from "@/lib/api";
-import { dur, ease, spring } from "@/lib/motion";
+import { dur, ease, spring, tween } from "@/lib/motion";
 import { useMotionPref } from "@/hooks/useMotionPref";
 import { addMonthsKey, formatMonth, monthKey } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -240,7 +240,7 @@ export function Analytics() {
                           className="inline-flex"
                           initial={{ opacity: 0, scale: mpref.reduced ? 1 : 0.85 }}
                           animate={{ opacity: 1, scale: 1 }}
-                          transition={mpref.reduced ? { duration: mpref.t(dur.fast) } : spring.pop}
+                          transition={mpref.reduced ? tween.instant : spring.pop}
                         >
                           <Tag tone="danger">Lowest</Tag>
                         </m.span>

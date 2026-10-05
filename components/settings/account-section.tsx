@@ -68,14 +68,14 @@ export function AccountSection() {
     <Card>
       <CardHeader>
         <CardTitle>Account</CardTitle>
-        <span className="text-xs text-muted-foreground">{session?.username ?? "—"}</span>
+        <span className="text-xs text-muted-foreground">{session?.name ?? "—"}</span>
       </CardHeader>
       <CardContent className="space-y-5 pt-4">
         <div className="flex items-start gap-3 rounded-xl bg-muted/60 p-4">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" />
           <p className="text-sm text-muted-foreground">
-            FaceTrack has no self sign-up. New accounts are created by an administrator with
-            the same credentials you use here.
+            Your email is how you sign in, and what your institute sees next to anything you
+            mark. Other staff accounts are managed by your institute owner.
           </p>
         </div>
 

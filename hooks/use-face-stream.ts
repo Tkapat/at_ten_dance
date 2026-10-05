@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, USE_MOCK } from "@/lib/api";
 import type { FrameReply, RecognitionEvent, StudentRow } from "@/lib/types";
 import { FaceOverlay, readOverlayColors } from "@/lib/overlay";
-import { ensureToken } from "@/lib/token";
+import { scannerToken } from "@/lib/token";
 import { getCameraPrefs } from "@/lib/prefs";
 
 export type StreamStatus = "idle" | "starting" | "connecting" | "open" | "error";
@@ -187,7 +187,7 @@ export function useFaceStream(): FaceStream {
   const connect = useCallback(() => {
     if (!shouldRunRef.current || USE_MOCK) return;
     void (async () => {
-      const token = await ensureToken();
+      const token = await scannerToken();
       if (!shouldRunRef.current) return;
       if (!token) {
         setStatus("error");

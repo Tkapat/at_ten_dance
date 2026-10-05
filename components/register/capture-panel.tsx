@@ -16,7 +16,7 @@ import {
   MIN_POSES,
 } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { dur, ease } from "@/lib/motion";
+import { tween } from "@/lib/motion";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useCameraPrefs } from "@/hooks/use-camera-prefs";
@@ -134,7 +134,7 @@ export function CapturePanel({
                       vectorEffect="non-scaling-stroke"
                       initial={{ pathLength: 0 }}
                       animate={{ pathLength: fill }}
-                      transition={{ duration: mpref.reduced ? 0 : dur.slow, ease: ease.out }}
+                      transition={mpref.reduced ? tween.none : tween.slow}
                     />
                   </g>
                 );

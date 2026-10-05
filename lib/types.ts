@@ -1,6 +1,31 @@
+import type { components, paths } from "./api-types";
 import type { Degree, Pose, RegisterIssue } from "./constants";
 
 export type { Degree, Pose, RegisterIssue };
+
+/**
+ * Shapes the service owns are not redeclared here: they are read out of
+ * `lib/api-types.ts`, which is generated from the backend's OpenAPI schema
+ * (`app/contracts.py`). A field renamed on the service is renamed here by
+ * running `pnpm api:types`, and the compiler points at every place that still
+ * uses the old one.
+ *
+ * What *is* declared here is what the app owns on top of the wire: statuses the
+ * app labels differently, records assembled from two endpoints, and the session
+ * the browser keeps.
+ */
+type Schema = components["schemas"];
+
+/**
+ * Request bodies are read out of the generated paths rather than written down
+ * again, for the same reason responses are: a field the service renamed shows up
+ * as a type error here instead of a 422 at runtime.
+ */
+type JsonBody<R extends { requestBody?: unknown }> = R extends {
+  requestBody: { content: { "application/json": infer B } };
+}
+  ? B
+  : never;
 
 export type Status =
   | "present"
@@ -128,20 +153,78 @@ export interface HealthStatus {
   uptimeSeconds: number;
 }
 
-export interface RecognitionSettings {
-  model: string;
-  sim_threshold: number;
-  margin: number;
-  votes_needed: number;
-  vote_window: number;
-  min_face_px: number;
-  recheck_seconds: number;
+/** What a student needs from an institute code, and nothing more. */
+export type PublicInstitute = Schema["PublicInstitute"];
+
+/** One row of the academic structure an institute imported. */
+export type Program = Schema["ProgramRow"];
+
+/** Where a new institute is in its own setup. */
+export type SetupStatus = Schema["SetupStatusOut"];
+
+export type SchemaColumn = Schema["SchemaColumn"];
+
+/** The institute's own student columns, and which two of them matter. */
+export type StudentSchema = Schema["StudentSchemaBody"];
+
+export type InstituteSettings = Schema["InstituteSettings"];
+
+export type ImportKind = "structure" | "students" | "holidays";
+export type ImportPreview = Schema["ImportPreviewOut"];
+export type ImportError = Schema["ImportIssue"];
+export type ImportCommit = Schema["ImportCommitOut"];
+
+/** A roster row as the service reports it, before the app renames its fields. */
+export type RosterRow = Schema["RosterRow"];
+
+/** One student as the admin's detail screen reads them. */
+export type AdminStudent = Schema["AdminStudent"];
+
+/** A student reading their own record. */
+export type StudentSelf = Schema["StudentSelf"];
+
+export type Role = "owner" | "admin" | "staff" | "student";
+
+/**
+ * Who is signed in, and whose data everything on screen belongs to.
+ *
+ * `role` decides which half of the app exists at all: a student never sees an
+ * admin route, and an institute user never sees `/me`. It is read from the
+ * session cookie, never asked for.
+ */
+export interface Session {
+  role: Role;
+  name: string;
+  institute: { id: string; name: string; code: string };
 }
 
-export interface Holiday {
-  date: string;
-  label: string;
-}
+/* ------------------------------------------------------------------ inputs */
+/* Bodies the service accepts, straight from the generated paths. */
+
+export type InstituteSignupInput = JsonBody<paths["/auth/institute/signup"]["post"]>;
+export type InstituteLoginInput = JsonBody<paths["/auth/institute/login"]["post"]>;
+export type InstitutePasswordInput = JsonBody<paths["/auth/institute/password"]["post"]>;
+export type StudentLoginInput = JsonBody<paths["/auth/student/login"]["post"]>;
+export type ClaimVerifyInput = JsonBody<paths["/auth/student/claim/verify"]["post"]>;
+export type ClaimCompleteInput = JsonBody<paths["/auth/student/claim/complete"]["post"]>;
+export type StudentSchemaInput = JsonBody<paths["/setup/student-schema"]["put"]>;
+export type InstituteSettingsInput = JsonBody<paths["/institution/settings"]["put"]>;
+export type ManualMarkInput = JsonBody<paths["/attendance/manual"]["put"]>;
+export type ImportCommitInput = JsonBody<paths["/setup/{kind}/commit"]["post"]>;
+
+/** What the claim step answers with: who you are about to claim, and nothing more. */
+export type ClaimVerifyResult = Schema["ClaimVerifyOut"];
+
+/**
+ * The details a claim may echo back. Shown on the confirm screen and nowhere
+ * earlier, because before the verification step nothing about the record has
+ * been proven.
+ */
+export type ClaimDetail = Schema["ClaimDetail"];
+
+export type Holiday = Schema["Holiday"];
+
+export type RecognitionSettings = Schema["RecognitionSettings"];
 
 export interface MarkedToday {
   id: string;

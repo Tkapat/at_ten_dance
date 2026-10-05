@@ -2,7 +2,7 @@
 
 import { m } from "framer-motion";
 import { useMotionPref } from "@/hooks/useMotionPref";
-import { dur, ease } from "@/lib/motion";
+import { tween } from "@/lib/motion";
 
 /**
  * Animated attendance ring. Fills from zero on mount so the eye is drawn to
@@ -58,7 +58,7 @@ export function ProgressRing({
             strokeDasharray={c}
             initial={{ strokeDashoffset: reduced ? c * (1 - pct / 100) : c }}
             animate={{ strokeDashoffset: c * (1 - pct / 100) }}
-            transition={{ duration: mpref.t(dur.count), ease: ease.out }}
+            transition={mpref.reduced ? tween.instant : tween.count}
           />
         </svg>
         {label && (

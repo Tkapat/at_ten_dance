@@ -17,6 +17,8 @@ export async function GET() {
   return NextResponse.json({
     token,
     username: session.username,
+    role: session.role,
+    name: session.name,
     expiresAt: session.expiresAt,
   });
 }

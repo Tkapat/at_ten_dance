@@ -2,7 +2,7 @@ import * as React from "react";
 import { m } from "framer-motion";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { dur } from "@/lib/motion";
+import { tween } from "@/lib/motion";
 
 type Variant = "primary" | "outline" | "ghost" | "danger" | "link";
 type Size = "sm" | "md" | "lg" | "icon";
@@ -54,7 +54,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     <m.button
       ref={ref}
       whileTap={{ scale: 0.97 }}
-      transition={{ duration: dur.fast }}
+      transition={tween.tap}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-xl font-medium",
         "transition-colors duration-150 select-none",
@@ -83,7 +83,7 @@ export function IconButton({
   return (
     <m.button
       whileTap={{ scale: 0.94 }}
-      transition={{ duration: dur.fast }}
+      transition={tween.tap}
       aria-label={label}
       title={label}
       className={cn(

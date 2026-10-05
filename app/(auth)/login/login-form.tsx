@@ -6,7 +6,7 @@ import { m } from "framer-motion";
 import { Eye, EyeOff, Lock, UserRound } from "lucide-react";
 import { api, USE_MOCK } from "@/lib/api";
 import { DEMO_PASSWORD, DEMO_USERNAME, MIN_PASSWORD_LENGTH } from "@/lib/constants";
-import { dur, ease, distance } from "@/lib/motion";
+import { distance, tween } from "@/lib/motion";
 import { LogoMark } from "@/components/shell/app-shell";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
@@ -116,7 +116,7 @@ export function LoginForm() {
                 <m.p
                   initial={{ opacity: 0, y: distance.page }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: dur.fast, ease: ease.out }}
+                  transition={tween.tick}
                   className="text-sm text-danger"
                 >
                   {error}

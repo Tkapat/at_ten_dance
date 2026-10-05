@@ -2,7 +2,7 @@
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { m } from "framer-motion";
-import { dur, ease, stagger } from "@/lib/motion";
+import { after, stagger, tween } from "@/lib/motion";
 import { useMotionPref } from "@/hooks/useMotionPref";
 import type { DayRecord, Status } from "@/lib/types";
 import { addMonthsKey, daysInMonth, formatMonth, monthKey, parseKey, todayKey } from "@/lib/format";
@@ -118,11 +118,10 @@ export function AttendanceHeatmap({
                 role="img"
                 initial={mpref.reduced ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{
-                  duration: mpref.t(dur.fast),
-                  ease: ease.out,
-                  delay: mpref.reduced ? 0 : (row + col) * stagger.list,
-                }}
+                transition={after(
+                  mpref.reduced ? tween.instant : tween.tick,
+                  mpref.reduced ? 0 : (row + col) * stagger.list,
+                )}
                 className={cn(
                   "relative grid aspect-square place-items-center rounded-md transition-transform",
                   "hover:scale-110",

@@ -17,7 +17,7 @@ import { RecognitionSection } from "./recognition-section";
 import { CameraSection } from "./camera-section";
 import { HolidaysSection } from "./holidays-section";
 import { setReducedMotionOverride } from "@/lib/motion-pref";
-import { dur, ease, distance } from "@/lib/motion";
+import { distance, tween } from "@/lib/motion";
 
 function AppearanceCard() {
   const { theme, setTheme } = useTheme();
@@ -178,7 +178,7 @@ export function Settings() {
     <m.div
       initial={{ opacity: 0, y: distance.page }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: dur.base, ease: ease.out }}
+      transition={tween.enter}
       className="mx-auto w-full max-w-3xl space-y-4 pb-6"
     >
       <p className="text-sm text-muted-foreground">
