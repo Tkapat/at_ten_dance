@@ -420,6 +420,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/institution": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Institution
+         * @description Everything the Settings → Institute form loads, in one call.
+         *
+         *     Name and location sit here next to the calendar and the timezone, so the
+         *     form does not need a second request to fill itself in. `code` is returned but
+         *     not editable here: it is the one identifier a student types to join, so
+         *     changing it silently would strand everybody who already knows it.
+         */
+        get: operations["get_institution_institution_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/institution/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Profile
+         * @description Rename an institute, or fill in where it is.
+         *
+         *     Deliberately narrow: this writes four columns and nothing else. The code is
+         *     not writable, the status is the platform's to decide, and the timezone belongs
+         *     to `/institution/settings` with the rest of the calendar — one endpoint, one
+         *     job, so a form cannot half-succeed against two different rules.
+         */
+        put: operations["put_profile_institution_profile_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/institution/settings": {
         parameters: {
             query?: never;
@@ -682,6 +732,7 @@ export interface paths {
         put?: never;
         /**
          * Check
+         * @deprecated
          * @description Live guidance for one frame: the same assessment the commit will re-run.
          *
          *     `target_pose` turns the answer into a gate. The browser asks for a pose, so a
@@ -706,6 +757,7 @@ export interface paths {
         put?: never;
         /**
          * Commit
+         * @deprecated
          * @description Create the student and store their face, or write nothing at all.
          *
          *     The capture is judged before the row is written, and the duplicate is found
@@ -729,6 +781,7 @@ export interface paths {
         };
         /**
          * Options
+         * @deprecated
          * @description What the capture form may offer: real programmes, real sections, the poses.
          *
          *     Degrees and departments come from the imported structure rather than a
@@ -755,6 +808,7 @@ export interface paths {
         put?: never;
         /**
          * Reenroll
+         * @deprecated
          * @description Replace an existing student's face.
          *
          *     The duplicate check skips this student, so re-enrolling somebody who is
@@ -994,6 +1048,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/students/{student_id}/enroll/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enroll Check
+         * @description Live guidance for one frame, for an existing student.
+         *
+         *     Byte-for-byte the same answer `/me/face/check` and `/register/check` give, so
+         *     the capture panel is one component rather than three that agree most of the
+         *     time. `target_pose` makes it a gate rather than advice, for the same reason
+         *     it does in `/register/check`.
+         */
+        post: operations["enroll_check_students__student_id__enroll_check_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/students/{student_id}/enroll/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Enroll Commit
+         * @description Store a face for a student who already exists.
+         *
+         *     The duplicate check skips this student, so re-running it compares them against
+         *     everybody else and never against their own vectors. A duplicate answers 409
+         *     naming the other student, which is safe here and nowhere a student is
+         *     involved: the caller is institute staff, and that row is inside their tenant.
+         */
+        post: operations["enroll_commit_students__student_id__enroll_commit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/students/{student_id}/month": {
         parameters: {
             query?: never;
@@ -1167,6 +1271,19 @@ export interface components {
             section: string;
             /** Year */
             year: number;
+        };
+        /** Body_enroll_check_students__student_id__enroll_check_post */
+        Body_enroll_check_students__student_id__enroll_check_post: {
+            /**
+             * Frame
+             * @description one JPEG from the camera
+             */
+            frame: string;
+        };
+        /** Body_enroll_commit_students__student_id__enroll_commit_post */
+        Body_enroll_commit_students__student_id__enroll_commit_post: {
+            /** Frames */
+            frames: string[];
         };
         /** Body_face_check_me_face_check_post */
         Body_face_check_me_face_check_post: {
@@ -1585,6 +1702,45 @@ export interface components {
             token: string;
             user: components["schemas"]["SessionUser"];
         };
+        /** InstituteOut */
+        InstituteOut: {
+            institution: components["schemas"]["InstituteProfile"];
+        };
+        /**
+         * InstituteProfile
+         * @description One institute, as both `GET /institution` and `PUT /institution/profile`
+         *     return it.
+         *
+         *     `code` and `status` are readable and deliberately not writable: the code is
+         *     how a student finds this institute, so it is fixed once chosen, and the status
+         *     is the platform's to decide rather than the institute's own.
+         */
+        InstituteProfile: {
+            /** Academicyearend */
+            academicYearEnd: string | null;
+            /** Academicyearstart */
+            academicYearStart: string | null;
+            /** City */
+            city: string | null;
+            /** Code */
+            code: string;
+            /** Country */
+            country: string | null;
+            /** Faceselfenroll */
+            faceSelfEnroll: boolean;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** State */
+            state: string | null;
+            /** Status */
+            status: string;
+            /** Timezone */
+            timezone: string;
+            /** Weeklyoff */
+            weeklyOff: number[] | null;
+        };
         /** InstituteRef */
         InstituteRef: {
             /** Code */
@@ -1837,6 +1993,24 @@ export interface components {
             /** Institutes */
             institutes: components["schemas"]["PlatformInstituteRow"][];
         };
+        /**
+         * ProfileIn
+         * @description The editable identity of an institute.
+         *
+         *     `name` is required; the rest may be cleared by sending an empty string, which
+         *     is how a form unsets a field it has just emptied. Omitted fields are left
+         *     alone, so a form that only sends the name cannot blank the city by accident.
+         */
+        ProfileIn: {
+            /** City */
+            city?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Name */
+            name: string;
+            /** State */
+            state?: string | null;
+        };
         /** ProgramRow */
         ProgramRow: {
             /** Coursecode */
@@ -1978,6 +2152,11 @@ export interface components {
             id: string;
             /** Isactive */
             isActive: boolean;
+            /**
+             * Joinstate
+             * @enum {string}
+             */
+            joinState: "not_joined" | "joined" | "enrolled";
             /** Loginid */
             loginId: string;
             /** Monthpct */
@@ -1990,6 +2169,8 @@ export interface components {
             section: string;
             /** Todaystatus */
             todayStatus: string | null;
+            /** Total */
+            total: number;
             /** Workingdays */
             workingDays: number;
             /** Year */
@@ -2257,6 +2438,8 @@ export interface components {
             count: number;
             /** Students */
             students: components["schemas"]["RosterRow"][];
+            /** Total */
+            total: number;
         };
         /** TodayOut */
         TodayOut: {
@@ -2908,6 +3091,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Ok"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_institution_institution_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstituteOut"];
+                };
+            };
+        };
+    };
+    put_profile_institution_profile_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstituteOut"];
                 };
             };
             /** @description Validation Error */
@@ -3861,6 +4097,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OkWithId"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enroll_check_students__student_id__enroll_check_post: {
+        parameters: {
+            query?: {
+                baseline?: number | null;
+                target_pose?: string | null;
+            };
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_enroll_check_students__student_id__enroll_check_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FrameQuality"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    enroll_commit_students__student_id__enroll_commit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_enroll_commit_students__student_id__enroll_commit_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegisterCommitOut"];
                 };
             };
             /** @description Validation Error */

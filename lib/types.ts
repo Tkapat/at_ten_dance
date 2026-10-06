@@ -52,7 +52,18 @@ export interface StudentRow extends Student {
   monthPct: number;
   presentDays: number;
   workingDays: number;
+  /**
+   * Where this student is in joining up: no account yet, an account, or a face.
+   *
+   * Decided by the service so that every client reads the same rule instead of
+   * each re-deriving it from `claimed` and `faceStatus` — which is how a student
+   * who has claimed an account but not enrolled a face ends up labelled
+   * "not joined" on one screen and "joined" on another.
+   */
+  joinState: JoinState;
 }
+
+export type JoinState = "not_joined" | "joined" | "enrolled";
 
 export interface DashboardSummary {
   presentToday: number;
@@ -209,6 +220,10 @@ export type ClaimVerifyInput = JsonBody<paths["/auth/student/claim/verify"]["pos
 export type ClaimCompleteInput = JsonBody<paths["/auth/student/claim/complete"]["post"]>;
 export type StudentSchemaInput = JsonBody<paths["/setup/student-schema"]["put"]>;
 export type InstituteSettingsInput = JsonBody<paths["/institution/settings"]["put"]>;
+
+/** The institute as the Settings → Institute form reads and writes it. */
+export type InstituteProfile = Schema["InstituteProfile"];
+export type InstituteProfileInput = JsonBody<paths["/institution/profile"]["put"]>;
 export type ManualMarkInput = JsonBody<paths["/attendance/manual"]["put"]>;
 export type ImportCommitInput = JsonBody<paths["/setup/{kind}/commit"]["post"]>;
 

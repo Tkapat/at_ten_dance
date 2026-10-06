@@ -11,7 +11,10 @@ import type {
   ImportCommit,
   ImportKind,
   ImportPreview,
+  InstituteProfile,
+  InstituteProfileInput,
   InstituteSettings,
+  JoinState,
   InstituteSignupInput,
   ManualMarkInput,
   MarkedToday,
@@ -57,9 +60,28 @@ export type FaceTrackApi = ApiClient;
 export interface StudentFilter {
   search?: string;
   degree?: Degree | null;
+  department?: string | null;
   section?: string | null;
+  /** Current year of the programme, computed by the service. */
   year?: number | null;
   status?: string | null;
+  /**
+   * `joined` is the service's own filter and is deliberately not the same as
+   * `joinState`: it asks "has an account", which includes students who have also
+   * enrolled a face. `joinState` on a row is the precise three-way answer.
+   */
+  joined?: JoinState | "all" | null;
+  limit?: number;
+  offset?: number;
+}
+
+/** One page of the roster, with the count that makes paging possible. */
+export interface StudentPage {
+  students: StudentRow[];
+  /** Rows in this page. */
+  count: number;
+  /** Rows the filters match, across every page. */
+  total: number;
 }
 
 export interface YearPoint {
@@ -74,11 +96,24 @@ export class ApiError extends Error {
   field?: string;
   issues?: string[];
   duplicate?: { message: string; studentId?: string; name?: string; similarity?: number };
+  /**
+   * Set on a 429: how many seconds the caller asked us to wait.
+   *
+   * A timer is only worth showing if it says the real number, so this is read
+   * from the body first and the header second — the header is the fallback for a
+   * response whose body was replaced somewhere along the way.
+   */
+  retryAfterSeconds?: number;
 
   constructor(
     status: number,
     message: string,
-    extra: { field?: string; issues?: string[]; duplicate?: ApiError["duplicate"] } = {},
+    extra: {
+      field?: string;
+      issues?: string[];
+      duplicate?: ApiError["duplicate"];
+      retryAfterSeconds?: number;
+    } = {},
   ) {
     super(message);
     this.name = "ApiError";
@@ -86,6 +121,7 @@ export class ApiError extends Error {
     this.field = extra.field;
     this.issues = extra.issues;
     this.duplicate = extra.duplicate;
+    this.retryAfterSeconds = extra.retryAfterSeconds;
   }
 }
 
@@ -144,6 +180,15 @@ export interface ApiClient {
   /** Academic calendar, weekly off, timezone, and whether self-enrolment is on. */
   instituteSettings(): Promise<InstituteSettings>;
   saveInstituteSettings(patch: Partial<InstituteSettings>): Promise<InstituteSettings>;
+  /** The institute's own record: name, where it is, and its code. */
+  instituteProfile(): Promise<InstituteProfile>;
+  /**
+   * Rename the institute, or fill in where it is.
+   *
+   * `code`, `status` and `timezone` are not writable here and the service refuses
+   * a body that names them, so an editor cannot appear to have saved one.
+   */
+  saveInstituteProfile(patch: InstituteProfileInput): Promise<InstituteProfile>;
 
   /* ---------------------------------------------------------------- imports */
   /** The template spreadsheet for one import kind, as a file. */
@@ -158,6 +203,14 @@ export interface ApiClient {
   /* ---------------------------------------------------------------- students */
   summary(): Promise<DashboardSummary>;
   listStudents(filter?: StudentFilter): Promise<StudentRow[]>;
+  /**
+   * One page of the roster, plus `total`.
+   *
+   * `listStudents` cannot answer "are there more?" — one page of rows cannot tell
+   * the end of a list from a filter that matched nothing — so a "load more" needs
+   * this rather than a guess based on a short page.
+   */
+  listStudentsPage(filter?: StudentFilter): Promise<StudentPage>;
   getStudent(id: string): Promise<StudentDetail>;
   /** Write one student from the institute's own column keys. */
   createStudent(values: Record<string, string | number | null>): Promise<{ id: string; name: string }>;
@@ -213,6 +266,18 @@ export interface ApiClient {
   registerCheck(frame: Blob, baseline?: number | null, targetPose?: Pose): Promise<RegisterCheck>;
   registerCommit(payload: RegisterPayload): Promise<RegisterResult>;
   reenroll(id: string, payload: RegisterPayload): Promise<RegisterResult>;
+  /**
+   * Live guidance for one frame while enrolling somebody who is already on the
+   * roster. Same answer as `registerCheck`, because it is the same capture panel.
+   */
+  enrollCheck(
+    id: string,
+    frame: Blob,
+    baseline?: number | null,
+    targetPose?: Pose,
+  ): Promise<RegisterCheck>;
+  /** Store a face for a student who already exists. */
+  enrollCommit(id: string, payload: RegisterPayload): Promise<RegisterResult>;
 
   /* --------------------------------------------------------------- settings */
   health(): Promise<HealthStatus>;
@@ -327,6 +392,20 @@ async function request<T>(
   }
 
   if (!res.ok) {
+    // Our own route handlers answer `{message}` rather than `{detail:{message}}`,
+    // so both shapes are read here and the rest of the app only sees one.
+    const flat = body as { message?: unknown; retryAfterSeconds?: unknown } | null;
+    if (typeof flat?.message === "string") {
+      const headerRetry = Number.parseInt(res.headers.get("retry-after") ?? "", 10);
+      throw new ApiError(res.status, flat.message, {
+        retryAfterSeconds:
+          typeof flat.retryAfterSeconds === "number"
+            ? flat.retryAfterSeconds
+            : Number.isFinite(headerRetry) && headerRetry > 0
+              ? headerRetry
+              : undefined,
+      });
+    }
     const detail = (body as { detail?: unknown } | null)?.detail;
     if (typeof detail === "string") throw new ApiError(res.status, detail);
     if (detail && typeof detail === "object") {
@@ -340,6 +419,7 @@ async function request<T>(
               similarity: typeof d.similarity === "number" ? d.similarity : undefined,
             }
           : undefined;
+      const headerRetry = Number.parseInt(res.headers.get("retry-after") ?? "", 10);
       throw new ApiError(
         res.status,
         typeof d.message === "string" ? d.message : "Request failed.",
@@ -347,6 +427,12 @@ async function request<T>(
           field: typeof d.field === "string" ? d.field : undefined,
           issues: Array.isArray(d.rejected) ? (d.rejected as string[]) : undefined,
           duplicate,
+          retryAfterSeconds:
+            typeof d.retryAfterSeconds === "number"
+              ? d.retryAfterSeconds
+              : Number.isFinite(headerRetry) && headerRetry > 0
+                ? headerRetry
+                : undefined,
         },
       );
     }
@@ -485,6 +571,10 @@ function mapDashboardRow(row: components["schemas"]["DashboardStudent"]): Studen
     monthPct: Number(row.monthPct ?? 0),
     presentDays: row.presentDays,
     workingDays: row.workingDays,
+    // The dashboard's row is a day's attendance, not a roster line: it carries no
+    // claim state at all, so `joinState` is not guessed from it. A screen showing a
+    // joining-up badge reads `listStudents`, where the service decides it.
+    joinState: "not_joined" as JoinState,
   };
 }
 
@@ -507,6 +597,10 @@ function mapRow(row: WireRow): StudentRow {
     monthPct: Number(row.monthPct ?? 0),
     presentDays: row.presentDays,
     workingDays: row.workingDays,
+    // The service decides this, and derives it the same way for every client.
+    // The fallback keeps an older service readable rather than leaving a badge
+    // blank: an enrolled face is the state that matters most.
+    joinState: row.joinState ?? (row.faceStatus === "enrolled" ? "enrolled" : "not_joined"),
   };
 }
 
@@ -605,19 +699,33 @@ function createRealApi(): ApiClient {
     },
 
     async listStudents(filter = {}) {
-      // The roster endpoint filters in SQL, so the search box and the four
-      // selects narrow the result set instead of the browser narrowing 2000 rows.
-      const r = await request<{ students: WireRow[] }>(
+      // The roster endpoint filters in SQL, so the search box and the selects
+      // narrow the result set instead of the browser narrowing thousands of rows.
+      const page = await this.listStudentsPage({ ...filter, limit: 2000, offset: 0 });
+      return page.students;
+    },
+
+    async listStudentsPage(filter = {}) {
+      const r = await request<{ students: WireRow[]; count: number; total: number }>(
         `/students${qs({
           search: filter.search,
           degree: filter.degree,
+          department: filter.department,
           section: filter.section,
           year: filter.year,
           status: filter.status,
-          limit: 2000,
+          joined: filter.joined,
+          limit: filter.limit ?? 200,
+          offset: filter.offset ?? 0,
         })}`,
       );
-      return r.students.map(mapRow);
+      return {
+        students: r.students.map(mapRow),
+        count: r.count,
+        // A service that predates `total` would leave this undefined; falling back
+        // to the page size keeps "load more" working rather than reading NaN.
+        total: r.total ?? r.students.length,
+      };
     },
 
     async getStudent(id) {
@@ -768,6 +876,28 @@ function createRealApi(): ApiClient {
       });
     },
 
+    async enrollCheck(id, frame, baseline, targetPose) {
+      const fd = new FormData();
+      fd.append("frame", frame, "frame.jpg");
+      return qualityResult(
+        await request<Record<string, unknown>>(
+          `/students/${id}/enroll/check${qs({
+            baseline: baseline ?? undefined,
+            target_pose: targetPose ?? undefined,
+          })}`,
+          { method: "POST", body: fd },
+        ),
+      );
+    },
+
+    async enrollCommit(id, payload) {
+      const fd = formData(payload);
+      return request<RegisterResult>(`/students/${id}/enroll/commit`, {
+        method: "POST",
+        body: fd,
+      });
+    },
+
     async recentlyMarked() {
       const r = await request<{
         attendance: {
@@ -896,6 +1026,19 @@ function createRealApi(): ApiClient {
         timezone: status.institute.timezone,
         faceSelfEnroll: (status.institute.settings.face_self_enroll as boolean | undefined) ?? true,
       } satisfies InstituteSettings;
+    },
+
+    async instituteProfile() {
+      const r = await request<{ institution: InstituteProfile }>("/institution");
+      return r.institution;
+    },
+
+    async saveInstituteProfile(patch) {
+      const r = await request<{ institution: InstituteProfile }>("/institution/profile", {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      });
+      return r.institution;
     },
 
     async saveInstituteSettings(patch) {

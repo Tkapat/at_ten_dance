@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { API_BASE, USE_MOCK } from "@/lib/env";
+import { serviceError } from "@/lib/server/service-error";
+import { BACKEND_URL, USE_MOCK } from "@/lib/env";
 import {
   createSessionToken,
   sessionCookieOptions,
@@ -26,16 +27,6 @@ const MIN_PASSWORD_LENGTH = 8;
 
 function failure(message: string, status: number) {
   return NextResponse.json({ message }, { status });
-}
-
-function detailMessage(body: unknown, fallback: string): string {
-  const detail = (body as { detail?: unknown } | null)?.detail;
-  if (typeof detail === "string" && detail) return detail;
-  if (detail && typeof detail === "object" && "message" in detail) {
-    const message = (detail as { message?: unknown }).message;
-    if (typeof message === "string" && message) return message;
-  }
-  return fallback;
 }
 
 export async function POST(request: NextRequest) {
@@ -65,7 +56,7 @@ export async function POST(request: NextRequest) {
     return response;
   }
 
-  const res = await fetch(`${API_BASE}/auth/student/login`, {
+  const res = await fetch(`${BACKEND_URL}/auth/student/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ code, loginId, password }),
@@ -74,7 +65,7 @@ export async function POST(request: NextRequest) {
   if (!res.ok) {
     // The service answers every failed student sign-in with one sentence, and so
     // does this route: nothing here may reveal whether the id exists.
-    return failure(detailMessage(await res.json().catch(() => null), "Details don't match"), res.status);
+    return serviceError(res, await res.json().catch(() => null), "Details don't match");
   }
   const body = (await res.json()) as { token?: string; student?: { id: string; name: string } };
   if (!body.token) return failure("The service returned no session.", 502);
@@ -82,7 +73,7 @@ export async function POST(request: NextRequest) {
   const claims = await verifySessionToken(body.token);
   let instituteName = "";
   try {
-    const lookup = await fetch(`${API_BASE}/public/institutes/${code}`, { cache: "no-store" });
+    const lookup = await fetch(`${BACKEND_URL}/public/institutes/${code}`, { cache: "no-store" });
     if (lookup.ok) {
       const parsed = (await lookup.json()) as { name?: string };
       instituteName = parsed.name ?? "";

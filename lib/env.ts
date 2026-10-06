@@ -15,6 +15,11 @@ export const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false";
  * and the two download links (an import template, an error report), which the
  * browser fetches directly so the file saves with its own name.
  *
+ * Server-side code must use `BACKEND_URL` below instead. A route handler already
+ * runs inside this app, so it can reach the service directly; sending it out
+ * through the public tunnel instead means every server-side call fails whenever
+ * the tunnel is not running, which is most of the time during development.
+ *
  * Everything else goes through `BACKEND_URL` below, on the server, so the
  * browser only ever talks to one origin and CORS stops being a concern.
  */

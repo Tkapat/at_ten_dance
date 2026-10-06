@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { API_BASE, USE_MOCK } from "@/lib/env";
+import { serviceError } from "@/lib/server/service-error";
+import { BACKEND_URL, USE_MOCK } from "@/lib/env";
 import { createSessionToken, sessionCookieOptions, SESSION_COOKIE } from "@/lib/session";
 import type { Session } from "@/lib/types";
 
@@ -13,16 +14,6 @@ import type { Session } from "@/lib/types";
 
 function failure(message: string, status: number) {
   return NextResponse.json({ message }, { status });
-}
-
-function detailMessage(body: unknown, fallback: string): string {
-  const detail = (body as { detail?: unknown } | null)?.detail;
-  if (typeof detail === "string" && detail) return detail;
-  if (detail && typeof detail === "object" && "message" in detail) {
-    const message = (detail as { message?: unknown }).message;
-    if (typeof message === "string" && message) return message;
-  }
-  return fallback;
 }
 
 export async function POST(request: NextRequest) {
@@ -56,7 +47,7 @@ export async function POST(request: NextRequest) {
     return response;
   }
 
-  const res = await fetch(`${API_BASE}/auth/institute/signup`, {
+  const res = await fetch(`${BACKEND_URL}/auth/institute/signup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -71,10 +62,7 @@ export async function POST(request: NextRequest) {
     cache: "no-store",
   });
   if (!res.ok) {
-    return failure(
-      detailMessage(await res.json().catch(() => null), "Could not create the account."),
-      res.status,
-    );
+    return serviceError(res, await res.json().catch(() => null), "Could not create the account.");
   }
   const body = (await res.json()) as {
     token?: string;

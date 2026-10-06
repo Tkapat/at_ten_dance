@@ -21,10 +21,15 @@ const fadeOnly = {
  * Wizard-like step transition for login/join/signup/setup/register. `stepKey`
  * should change whenever the step changes; `direction` is +1 forward, -1 back.
  *
- * With `focusHeading`, once the incoming step settles focus moves to its first
- * heading (target `[data-step-heading]`, else the first h1/h2/h3), so screen
- * readers announce the new step. Skipped on the very first mount — a page load
- * should not steal focus.
+ * With `focusHeading`, once the incoming step settles focus moves to its heading so
+ * screen readers announce the new step: target `[data-step-heading]`, else the
+ * first h1/h2/h3. Skipped on the very first mount — a page load should not steal
+ * focus.
+ *
+ * The heading is looked for inside this component first, and then in the wrapping
+ * card. Most of the entry screens put the question *above* the transition, in a
+ * shared card, because the card is what holds the two tabs or the progress strip;
+ * without the second lookup those steps would move silently and announce nothing.
  */
 export function StepTransition({
   stepKey,
@@ -59,7 +64,8 @@ export function StepTransition({
     if (!root) return;
     const target =
       root.querySelector<HTMLElement>("[data-step-heading]") ??
-      root.querySelector<HTMLElement>("h1, h2, h3");
+      root.querySelector<HTMLElement>("h1, h2, h3") ??
+      root.parentElement?.querySelector<HTMLElement>("[data-step-heading]");
     if (target) {
       target.setAttribute("tabindex", "-1");
       target.focus();

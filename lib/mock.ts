@@ -20,7 +20,9 @@ import type {
   ImportError,
   ImportKind,
   ImportPreview,
+  InstituteProfile,
   InstituteSettings,
+  JoinState,
   MarkedToday,
   Program,
   RecognitionSettings,
@@ -507,6 +509,12 @@ function markTimes(key: string): string[] {
   });
 }
 
+/** The service's rule, in one place: an enrolled face wins over a claimed account. */
+function joinStateOf(student: MockStudent): JoinState {
+  if (student.faceStatus === "enrolled") return "enrolled";
+  return student.claimed ? "joined" : "not_joined";
+}
+
 function toStudentRow(student: MockStudent): StudentRow {
   const m = studentMonth(student, monthKey());
   return {
@@ -515,6 +523,7 @@ function toStudentRow(student: MockStudent): StudentRow {
     monthPct: Math.round(m.pct * 10) / 10,
     presentDays: m.present,
     workingDays: m.working,
+    joinState: joinStateOf(student),
   };
 }
 
@@ -559,9 +568,18 @@ function applyFilter(rows: StudentRow[], filter: StudentFilter): StudentRow[] {
     );
   }
   if (filter.degree) out = out.filter((r) => r.degree === filter.degree);
+  if (filter.department) out = out.filter((r) => r.department === filter.department);
   if (filter.section) out = out.filter((r) => r.section === filter.section);
   if (filter.year) out = out.filter((r) => r.year === filter.year);
   if (filter.status) out = out.filter((r) => r.todayStatus === filter.status);
+  // `joined` asks "has an account", so it includes students who also have a face.
+  // That is the service's behaviour and the mock has to agree, or a screen would
+  // behave differently depending on which adapter it was talking to.
+  if (filter.joined && filter.joined !== "all") {
+    out = out.filter((r) =>
+      filter.joined === "enrolled" ? r.joinState === "enrolled" : r.joinState !== "not_joined",
+    );
+  }
   return [...out].sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -779,6 +797,19 @@ export function createMockApi(): ApiClient {
       return applyFilter(store().students.map(toStudentRow), filter);
     },
 
+    async listStudentsPage(filter = {}) {
+      await delay(190);
+      const matched = applyFilter(store().students.map(toStudentRow), filter);
+      const offset = filter.offset ?? 0;
+      // `total` is the whole match, `count` the page: the difference is what tells
+      // "load more" apart from the end of the list.
+      return {
+        students: matched.slice(offset, offset + (filter.limit ?? 200)),
+        count: Math.min(filter.limit ?? 200, Math.max(0, matched.length - offset)),
+        total: matched.length,
+      };
+    },
+
     async getStudent(id) {
       await delay(150);
       const student = store().students.find((x) => x.id === id);
@@ -913,6 +944,39 @@ export function createMockApi(): ApiClient {
         poses: [...POSES],
         poseLabels: POSE_LABELS,
         posePrompts: POSE_PROMPTS,
+      };
+    },
+
+    async enrollCheck(_id, _frame, _baseline, targetPose) {
+      // The same capture panel drives this as `registerCheck`, so it has to answer
+      // the same way — otherwise a mock build would review a different experience
+      // from the real one.
+      return this.registerCheck(_frame, _baseline, targetPose);
+    },
+
+    async enrollCommit(id, payload) {
+      await delay(700);
+      const s = store();
+      const idx = s.students.findIndex((x) => x.id === id);
+      if (idx < 0) throw new ApiError(404, "Student not found.");
+      if (payload.frames.length < MIN_GOOD_FRAMES) {
+        throw new ApiError(422, "Not enough usable frames were captured.", { field: "frames" });
+      }
+      const current = s.students[idx];
+      // The service refuses to overwrite a working template until it is unlocked,
+      // so the mock has to refuse too or "load more" looks different per adapter.
+      if (current.faceStatus === "enrolled") {
+        throw new ApiError(422, "This student's face is already enrolled. Unlock it first to re-capture.", {
+          field: "face_status",
+        });
+      }
+      s.students[idx] = { ...current, faceStatus: "enrolled" };
+      return {
+        studentId: id,
+        name: current.name,
+        embeddings: Math.min(MIN_GOOD_FRAMES, payload.frames.length),
+        poses: ["front", "left", "right"],
+        gallerySize: s.students.filter((x) => x.faceStatus === "enrolled" && x.isActive !== false).length,
       };
     },
 
@@ -1191,6 +1255,42 @@ export function createMockApi(): ApiClient {
         version: db.institute.schema.version + 1,
       };
       return this.studentSchema();
+    },
+
+    async instituteProfile() {
+      await delay(80);
+      const institute = store().institute;
+      return {
+        id: institute.id,
+        code: institute.code,
+        name: institute.name,
+        city: institute.city || null,
+        state: institute.state || null,
+        country: "India",
+        timezone: institute.timezone,
+        status: institute.status,
+        academicYearStart: institute.academicYearStart,
+        academicYearEnd: institute.academicYearEnd,
+        weeklyOff: institute.weeklyOff,
+        faceSelfEnroll: institute.faceSelfEnroll,
+      } satisfies InstituteProfile;
+    },
+
+    async saveInstituteProfile(patch) {
+      await delay(120);
+      const institute = store().institute;
+      // Only the four fields the service writes. `code` and `status` are not
+      // accepted there either, and the mock refusing keeps a form honest about
+      // what it can save.
+      institute.name = patch.name.split(/\s+/).join(" ") || institute.name;
+      // `null` clears the field, an empty string clears it, `undefined` leaves it.
+      if (patch.city !== undefined) institute.city = patch.city?.trim() ?? "";
+      if (patch.state !== undefined) institute.state = patch.state?.trim() ?? "";
+      const s = store();
+      s.session = s.session
+        ? { ...s.session, institute: { ...s.session.institute, name: institute.name } }
+        : s.session;
+      return this.instituteProfile();
     },
 
     async instituteSettings() {

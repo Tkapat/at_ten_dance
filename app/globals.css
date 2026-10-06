@@ -222,3 +222,41 @@ body {
 .highlight-flash {
   animation: highlight-fade 1.2s var(--ease-out) forwards;
 }
+
+/* ------------------------------------------------------------------- print
+   The code reveal doubles as a poster. Printing it has one job: a sheet of paper
+   that goes on a wall, read from two metres away by somebody holding a phone.
+
+   So everything that is only useful on a screen is hidden — including the app
+   shell — colours are forced to black on white rather than left to the printer's
+   idea of the dark theme, and the code is set large enough to read at a distance
+   rather than at arm's length. */
+@media print {
+  html, body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  /* The shell, the tab bar, the top bar: none of it belongs on the poster. */
+  header, nav, aside, [data-print-hide] {
+    display: none !important;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .print\:block {
+    display: block !important;
+  }
+
+  /* Never break the code across two sheets. */
+  .print-keep {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  a[href]::after {
+    content: "";
+  }
+}
